@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import SwiftUI
 
 class ViewController: UIViewController {
     
@@ -21,6 +22,11 @@ class ViewController: UIViewController {
         
         if let sceneDelegate = view.window?.windowScene?.delegate as? SceneDelegate {
             sceneDelegate.changeRootViewController(homeVC, animated: true)
+            
+            NavigationStack {
+                NavigationLink("Go to Second View", destination: homeVC)
+            }
+
         }
         
         
