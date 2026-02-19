@@ -16,6 +16,12 @@ class HomeViewController: UIViewController {
     }
     
     
+    @IBAction func hostSessionTapped(_ sender: UIButton) {
+        performSegue(withIdentifier: "goToHost", sender: self)
+    }
+    
+    
+    
 
     override func viewDidLoad() {
         super.viewDidLoad()
