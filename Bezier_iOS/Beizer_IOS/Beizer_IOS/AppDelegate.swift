@@ -1,14 +1,15 @@
 //
 //  AppDelegate.swift
-//  Bezier_iOS
+//  Beizer_IOS
 //
-//  Created by Wolf,Luke D on 2/3/26.
+//  Created by Wolf,Luke D on 2/19/26.
 //
 
 import UIKit
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+
 
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
