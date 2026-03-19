@@ -6,144 +6,146 @@
 //
 
 import UIKit
+import FirebaseFirestore
+
 
 class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
-    
     
     @IBOutlet weak var qrCodeImageView: UIImageView!
     @IBOutlet weak var attendeeCountLabel: UILabel!
     @IBOutlet weak var attendeeTableView: UITableView!
-    
-    // Store the session ID and attendee list
-    var sessionID: String = ""
-    var attendees: [String] = [] // Will hold username/emails
-    
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
+        var sessionId: String = ""
+        var hostId: String = ""  // This goes in the QR code
+        var attendees: [AttendeeInfo] = []
+        var listener: ListenerRegistration?
         
-        // Set up table view
-        attendeeTableView.delegate = self
-        attendeeTableView.dataSource = self
-        
-        // Generate unique session ID
-        sessionID = generateUniqueSessionID()
-        
-        // Generate QR code with the session ID
-        let qrImage = generateQRCode(from: sessionID)
-        qrCodeImageView.image = qrImage
-        
-        // Update attendee count
-        updateAttendeeCount()
-        
-        // For demo add some fake people
-        addDemoAttendees()
-        
-    }
-    
-    // MARK: - QR Code Generation
-    
-    func generateUniqueSessionID() -> String {
-        // Create a unique ID using timestamp and random number
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let random = Int.random(in: 10000...99999)
-        let uniqueID = "SESSION-\(timestamp)-\(random)"
-        
-        print("Generated Session ID: \(uniqueID)")
-        return uniqueID
-    }
-    
-    func generateQRCode(from input: String) -> UIImage? {
-        guard let data = input.data(using: .ascii) else { return nil }
-        
-        if let filter = CIFilter(name: "CIQRCodeGenerator") {
-            filter.setValue(data, forKey: "inputMessage")
+        override func viewDidLoad() {
+            super.viewDidLoad()
             
-            // Create higher res QR code
-            let transform = CGAffineTransform(scaleX: 10, y: 10)
+            attendeeTableView.delegate = self
+            attendeeTableView.dataSource = self
             
-            if let output = filter.outputImage?.transformed(by: transform) {
-                let context = CIContext()
-                if let cgImage = context.createCGImage(output, from: output.extent) {
-                    return UIImage(cgImage: cgImage)
+            // Create session in Firebase
+            createSession()
+        }
+        
+        func createSession() {
+            // You can customize the session name or ask the user
+            let sessionName = "Attendance Session"
+            
+            FirebaseManager.shared.createSession(sessionName: sessionName) { result in
+                switch result {
+                case .success(let (sessionId, hostId)):
+                    self.sessionId = sessionId
+                    self.hostId = hostId
+                    
+                    print("✅ Session created!")
+                    print("   sessionId (Firestore doc): \(sessionId)")
+                    print("   hostId (QR code): \(hostId)")
+                    
+                    // Generate QR code with hostId (this is what students scan)
+                    let qrImage = self.generateQRCode(from: hostId)
+                    self.qrCodeImageView.image = qrImage
+                    
+                    // Start listening for attendees
+                    self.startListening()
+                    
+                case .failure(let error):
+                    print("❌ Failed to create session: \(error)")
+                    self.showAlert(message: "Failed to create session: \(error.localizedDescription)")
                 }
             }
         }
         
-        return nil
-    }
-    
-    // MARK: - Attendee Management
-    
-    func updateAttendeeCount() {
-        attendeeCountLabel.text = "Attendees: \(attendees.count)"
-    }
-    
-    func addAttendee(username: String){
-        // Check for duplicates
-        if !attendees.contains(username) {
-            attendees.append(username)
-            updateAttendeeCount()
-            attendeeTableView.reloadData()
-        }
-    }
-    
-    // MARK: - Testing data (REMOVE LATER)
-    
-    func addDemoAttendees() {
-        // Sim people joining over time
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.addAttendee(username: "john.doe@gmail.com")
+        func startListening() {
+            listener = FirebaseManager.shared.listenToSession(sessionId: sessionId) { attendees in
+                print("📢 Attendees updated: \(attendees.count) total")
+                self.attendees = attendees
+                self.updateAttendeeCount()
+                self.attendeeTableView.reloadData()
+            }
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-            self.addAttendee(username: "jane.smith@example.com")
+        func updateAttendeeCount() {
+            attendeeCountLabel.text = "Attendees: \(attendees.count)"
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
-            self.addAttendee(username: "dogboy@catmail.com")
+        func generateQRCode(from string: String) -> UIImage? {
+            let data = string.data(using: .ascii)
+            
+            if let filter = CIFilter(name: "CIQRCodeGenerator") {
+                filter.setValue(data, forKey: "inputMessage")
+                let transform = CGAffineTransform(scaleX: 10, y: 10)
+                
+                if let output = filter.outputImage?.transformed(by: transform) {
+                    let context = CIContext()
+                    if let cgImage = context.createCGImage(output, from: output.extent) {
+                        return UIImage(cgImage: cgImage)
+                    }
+                }
+            }
+            
+            return nil
+        }
+        
+        // MARK: - Table View
+        
+        func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+            return attendees.count
+        }
+        
+        func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+            let cell = tableView.dequeueReusableCell(withIdentifier: "AttendeeCell") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "AttendeeCell")
+            
+            let attendee = attendees[indexPath.row]
+            cell.textLabel?.text = attendee.displayName
+            cell.detailTextLabel?.text = attendee.email
+            
+            return cell
+        }
+        
+        // MARK: - Actions
+        
+        @IBAction func endSessionTapped(_ sender: UIButton) {
+            let alert = UIAlertController(
+                title: "End Session?",
+                message: "Are you sure? \(attendees.count) students checked in.",
+                preferredStyle: .alert
+            )
+            
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            
+            alert.addAction(UIAlertAction(title: "End Session", style: .destructive) { _ in
+                self.endSession()
+            })
+            
+            present(alert, animated: true)
+        }
+        
+        func endSession() {
+            FirebaseManager.shared.endSession(sessionId: sessionId) { result in
+                switch result {
+                case .success:
+                    print("✅ Session ended")
+                    self.listener?.remove()
+                    self.navigationController?.popViewController(animated: true)
+                    
+                case .failure(let error):
+                    print("❌ Failed to end session: \(error)")
+                    self.showAlert(message: "Failed to end session")
+                }
+            }
+        }
+        
+        func showAlert(message: String) {
+            let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+        }
+        
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            listener?.remove()
         }
     }
-    
-    // MARK: - Table View Data Storage
-    
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return attendees.count
-    }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        // Use a basic cell
-        let cell = tableView.dequeueReusableCell(withIdentifier: "AttendeeCell") ?? UITableViewCell(style: .default, reuseIdentifier: "AttendeeCell")
-        
-        cell.textLabel?.text = attendees[indexPath.row]
-        
-        return cell
-    }
-    
-    // MARK: - Actions
-    
-    @IBAction func endSessionTapped(_ sender: UIButton) {
-        // Show confirmation alert
-        let alert = UIAlertController(title: "End Session?", message: "Are you sure you want to end this session? \(attendees.count) students have checked in.", preferredStyle: .alert)
-        
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-        
-        alert.addAction(UIAlertAction(title: "End Session", style: .destructive) { _ in
-            // Go back to home screen
-            self.navigationController?.popViewController(animated: true)
-        })
-        
-        present(alert, animated: true)
-    }
-
-    /*
-    // MARK: - Navigation
-
-    // In a storyboard-based application, you will often want to do a little preparation before navigation
-    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-        // Get the new view controller using segue.destination.
-        // Pass the selected object to the new view controller.
-    }
-    */
-
-}

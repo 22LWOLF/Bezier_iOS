@@ -100,13 +100,43 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     func qrCodeDetected(code: String) {
         print("QR Code detected: \(code)")
         
-        let alert = UIAlertController(title: "QR Code Scanned!", message: "Code: \(code)", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
-            self.navigationController?.popViewController(animated: true)
-        })
-        present(alert, animated: true)
+        // The code should be the hostId (e.g., "SESSION-1771535026-73943")
+        FirebaseManager.shared.joinSession(hostId: code) { result in
+            switch result {
+            case .success(let sessionId):
+                // Success!
+                print("✅ Joined session: \(sessionId)")
+                let alert = UIAlertController(
+                    title: "✅ Attendance Marked!",
+                    message: "You've successfully checked in.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                    self.navigationController?.popViewController(animated: true)
+                })
+                self.present(alert, animated: true)
+                
+            case .failure(let error):
+                // Failed
+                print("❌ Check-in failed: \(error.localizedDescription)")
+                let alert = UIAlertController(
+                    title: "❌ Check-in Failed",
+                    message: error.localizedDescription,
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "Try Again", style: .default) { _ in
+                    // Restart camera
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        self.captureSession.startRunning()
+                    }
+                })
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                    self.navigationController?.popViewController(animated: true)
+                })
+                self.present(alert, animated: true)
+            }
+        }
     }
-    
     func showAlert(message: String) {
         let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in

@@ -8,6 +8,8 @@
 import UIKit
 import AVFoundation
 import FirebaseCore
+import FirebaseAuth
+      
 
 class ViewController: UIViewController {
     
@@ -67,71 +69,92 @@ class ViewController: UIViewController {
             textField.leftView = paddingView
             textField.leftViewMode = .always
         }
-
-    func playSound(named name: String, withExtension ext: String) {
-        if let url = Bundle.main.url(forResource: name, withExtension: ext) {
-            do {
-                audioPlayer = try AVAudioPlayer(contentsOf: url)
-                audioPlayer?.prepareToPlay()
-                audioPlayer?.play()
-            } catch {
-                print("Failed to play sound: \(error)")
-            }
-        } else {
-            print("Sound file not found: \(name).\(ext)")
-        }
-    }
     
     
     @IBAction func loginButtonTapped(_ sender: UIButton) {
         // Get the username and password
-               let email = emailTextField.text ?? ""
-               let password = passwordTextField.text ?? ""
-               
-               // Basic validation
-               if email.isEmpty || password.isEmpty {
-                   // Play sound effect when triggering the rotation/scale animation
-                   playSound(named: "login", withExtension: "mp3") // Update to your actual filename and extension
-                   shakeView(sender)
-                   return
-               }
+        let email = emailTextField.text ?? ""
+        let password = passwordTextField.text ?? ""
         
+        // Basic validation
+                if email.isEmpty || password.isEmpty {
+                    shakeView(sender)
+                    presentAuthAlert(title: "Missing Info", message: "Please enter both email and password")
+                    return
+            }
+            
+
         // Scale button on tap
-                UIView.animate(withDuration: 0.1, animations: {
-                    sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
-                }) { _ in
-                    UIView.animate(withDuration: 0.1) {
-                        sender.transform = .identity
+        UIView.animate(withDuration: 0.1, animations: {
+            sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
+        }) { _ in
+            UIView.animate(withDuration: 0.1) {
+                sender.transform = .identity
+            }
+        }
+        
+        // Use FirebaseManager to login
+                sender.isEnabled = false
+                let originalTitle = sender.title(for: .normal)
+                sender.setTitle("Logging in...", for: .normal)
+                
+                FirebaseManager.shared.login(email: email, password: password) { result in
+                    DispatchQueue.main.async {
+                        sender.isEnabled = true
+                        sender.setTitle(originalTitle, for: .normal)
+                        
+                        switch result {
+                        case .success(let userID):
+                            print("✅ Logged in successfully! User ID: \(userID)")
+                            self.performSegue(withIdentifier: "goToHome", sender: self)
+                            
+                        case .failure(let error):
+                            print("❌ Login failed: \(error.localizedDescription)")
+                            self.presentAuthAlert(title: "Login Failed", message: error.localizedDescription)
+                            self.shakeView(sender)
+                        }
                     }
                 }
-                
+            }
+
+    @IBAction func registerButtonTapped(_ sender: UIButton) {
+        let email = emailTextField.text ?? ""
+               let password = passwordTextField.text ?? ""
                
-               // For now, just navigate to home screen
-               // Later you'll add real authentication here
-               performSegue(withIdentifier: "goToHome", sender: self)
-    }
-    
-    
-    // Counts from -200 up to 0 and from 200 down to 0 by 1. Returns both sequences.
-    func makeSequentialNumbers() -> (upFromNegative: [Int], downFromPositive: [Int]) {
-        let upFromNegative = Array(-200...0)
-        let downFromPositive = Array(stride(from: 200, through: 0, by: -1))
-        return (upFromNegative, downFromPositive)
-    }
-    
-    // If you need a single interleaved sequence like -200, 200, -199, 199, ..., 0, 0
-    func makeInterleavedSequentialNumbers() -> [Int] {
-        var result: [Int] = []
-        var neg = -200
-        var pos = 200
-        while neg <= 0 && pos >= 0 {
-            result.append(neg)
-            result.append(pos)
-            neg += 1
-            pos -= 1
-        }
-        return result
-    }
+               // For now, we'll use placeholder names - you can add name fields later
+               let firstName = "New"
+               let lastName = "User"
+               
+               guard !email.isEmpty, !password.isEmpty else {
+                   presentAuthAlert(title: "Missing Info", message: "Please enter both email and password to register.")
+                   return
+               }
+               
+               sender.isEnabled = false
+               let originalTitle = sender.title(for: .normal)
+               sender.setTitle("Registering...", for: .normal)
+               
+               FirebaseManager.shared.register(email: email, password: password, firstName: firstName, lastName: lastName) { result in
+                   DispatchQueue.main.async {
+                       sender.isEnabled = true
+                       sender.setTitle(originalTitle, for: .normal)
+                       
+                       switch result {
+                       case .success(let userID):
+                           print("✅ Registered successfully! User ID: \(userID)")
+                           self.presentAuthAlert(title: "Success", message: "Account created successfully!")
+                           // Automatically go to home after successful registration
+                           DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                               self.performSegue(withIdentifier: "goToHome", sender: self)
+                           }
+                           
+                       case .failure(let error):
+                           print("❌ Registration failed: \(error.localizedDescription)")
+                           self.presentAuthAlert(title: "Registration Failed", message: error.localizedDescription)
+                       }
+                   }
+               }
+           }
     
     func shakeView(_ view: UIView) {
         let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
@@ -159,6 +182,11 @@ class ViewController: UIViewController {
         view.layer.add(group, forKey: "spinScale")
     }
     
+    private func presentAuthAlert(title: String, message: String) {
+           let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+           alert.addAction(UIAlertAction(title: "OK", style: .default))
+           self.present(alert, animated: true)
+       }
+   }
 
-}
-
+// .collection() .doc() stuff to access certain areas within the docs.
