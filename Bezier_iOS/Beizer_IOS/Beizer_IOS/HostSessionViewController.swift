@@ -36,16 +36,15 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
             
             FirebaseManager.shared.createSession(sessionName: sessionName) { result in
                 switch result {
-                case .success(let (sessionId, hostId)):
+                case .success(let (sessionId)):
                     self.sessionId = sessionId
-                    self.hostId = hostId
+
                     
                     print("✅ Session created!")
                     print("   sessionId (Firestore doc): \(sessionId)")
-                    print("   hostId (QR code): \(hostId)")
                     
                     // Generate QR code with hostId (this is what students scan)
-                    let qrImage = self.generateQRCode(from: hostId)
+                    let qrImage = self.generateQRCode(from: sessionId)
                     self.qrCodeImageView.image = qrImage
                     
                     // Start listening for attendees

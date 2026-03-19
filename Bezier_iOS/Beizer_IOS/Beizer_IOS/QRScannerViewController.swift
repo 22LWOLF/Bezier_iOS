@@ -101,7 +101,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         print("QR Code detected: \(code)")
         
         // The code should be the hostId (e.g., "SESSION-1771535026-73943")
-        FirebaseManager.shared.joinSession(hostId: code) { result in
+        FirebaseManager.shared.joinSession(sessionID: code) { result in
             switch result {
             case .success(let sessionId):
                 // Success!
@@ -118,7 +118,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
                 
             case .failure(let error):
                 // Failed
-                print("❌ Check-in failed: \(error.localizedDescription)")
+                print("Check-in failed: \(error.localizedDescription)")
                 let alert = UIAlertController(
                     title: "❌ Check-in Failed",
                     message: error.localizedDescription,
