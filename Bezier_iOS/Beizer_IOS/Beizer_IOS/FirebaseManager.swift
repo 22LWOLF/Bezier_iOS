@@ -50,11 +50,10 @@ class FirebaseManager {
             
             // Create user document in Firestore
             let userData: [String: Any] = [
-                "email": email,
-                "firstName": firstName,
-                "lastName": lastName,
-                "displayName": "\(firstName) \(lastName)",
-                "createdAt": Int(Date().timeIntervalSince1970 * 1000)
+                "participantemail": email,
+                "participantDisplayName": "\(firstName) \(lastName)",
+                "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                "participantId": userID
             ]
             
             self.db.collection("users").document(userID).setData(userData) { error in
@@ -166,31 +165,31 @@ class FirebaseManager {
                     
                     // Check if user already attended
                     self.db.collection("attendance_sessions").document(sessionID)
-                        .collection("attendees").document(userID).getDocument { attendeeDoc, error in
+                        .collection("participants").document(userID).getDocument { participantDoc, error in
                             
-                            if attendeeDoc?.exists == true {
+                            if participantDoc?.exists == true {
                                 print("⚠️ User already checked in")
                                 completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already checked in to this session"])))
                                 return
                             }
                             
-                            // Add user to attendees subcollection
-                            let attendeeData: [String: Any] = [
-                                "userId": userID,
-                                "email": userData["email"] as? String ?? "Unknown",
-                                "displayName": userData["displayName"] as? String ?? "Unknown",
-                                "firstName": userData["firstName"] as? String ?? "",
-                                "lastName": userData["lastName"] as? String ?? "",
-                                "checkedInAt": Int(Date().timeIntervalSince1970 * 1000)
+                            // Add user to participants subcollection
+                            let participantData: [String: Any] = [
+                                "participantId": userID,
+                                "participantEmail": userData["participantEmail"] as? String ?? "Unknown",
+                                // change to be dictonary
+                                "participantDisplayName": userData["participantDisplayName"] as? String ?? "Unknown",
+                                "checkedInAt": Int(Date().timeIntervalSince1970 * 1000),
+                                "sessionId": sessionID
                             ]
                             
-                            print("📝 Adding attendee to session")
+                            print("📝 Adding participant to session")
                             
                             self.db.collection("attendance_sessions").document(sessionID)
-                                .collection("attendees").document(userID).setData(attendeeData) { error in
+                                .collection("participants").document(userID).setData(participantData) { error in
                                     
                                     if let error = error {
-                                        print("❌ Failed to add attendee: \(error.localizedDescription)")
+                                        print("❌ Failed to add participant: \(error.localizedDescription)")
                                         completion(.failure(error))
                                         return
                                     }
@@ -218,12 +217,12 @@ class FirebaseManager {
         }
     }
     
-    func listenToSession(sessionId: String, onUpdate: @escaping ([AttendeeInfo]) -> Void) -> ListenerRegistration {
+    func listenToSession(sessionId: String, onUpdate: @escaping ([ParticipantInfo]) -> Void) -> ListenerRegistration {
         
         print("👂 Starting to listen to session: \(sessionId)")
         
         return db.collection("attendance_sessions").document(sessionId)
-            .collection("attendees")
+            .collection("participants")
             .addSnapshotListener { snapshot, error in
                 
                 if let error = error {
@@ -233,16 +232,16 @@ class FirebaseManager {
                 }
                 
                 guard let documents = snapshot?.documents else {
-                    print("📭 No attendees yet")
+                    print("📭 No participants yet")
                     onUpdate([])
                     return
                 }
                 
-                print("📢 Attendees updated: \(documents.count) total")
+                print("📢 Participants updated: \(documents.count) total")
                 
-                let attendees = documents.compactMap { doc -> AttendeeInfo? in
+                let participants = documents.compactMap { doc -> ParticipantInfo? in
                     let data = doc.data()
-                    return AttendeeInfo(
+                    return ParticipantInfo(
                         userId: data["userId"] as? String ?? "",
                         email: data["email"] as? String ?? "",
                         displayName: data["displayName"] as? String ?? "Unknown",
@@ -252,7 +251,7 @@ class FirebaseManager {
                     )
                 }
                 
-                onUpdate(attendees)
+                onUpdate(participants)
             }
     }
     
@@ -276,7 +275,7 @@ class FirebaseManager {
 
 // MARK: - Data Models
 
-struct AttendeeInfo {
+struct ParticipantInfo {
     let userId: String
     let email: String
     let displayName: String

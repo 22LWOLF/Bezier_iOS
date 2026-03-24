@@ -97,14 +97,36 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         }
     }
     
+    private func parseSessionId(from code: String) -> String? {
+        if let data = code.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data, options: []),
+           let dict = obj as? [String: Any] {
+            if let sessionId = dict["sessionId"] as? String, !sessionId.isEmpty {
+                return sessionId
+            }
+        }
+        return code
+    }
+    
     func qrCodeDetected(code: String) {
         print("QR Code detected: \(code)")
-        
-        // The code should be the hostId (e.g., "SESSION-1771535026-73943")
-        FirebaseManager.shared.joinSession(sessionID: code) { result in
+        guard let sessionId = parseSessionId(from: code) else {
+            let alert = UIAlertController(
+                title: "Invalid QR",
+                message: "This QR code doesn't contain a valid session ID.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.captureSession.startRunning()
+                }
+            })
+            self.present(alert, animated: true)
+            return
+        }
+        FirebaseManager.shared.joinSession(sessionID: sessionId) { result in
             switch result {
             case .success(let sessionId):
-                // Success!
                 print("✅ Joined session: \(sessionId)")
                 let alert = UIAlertController(
                     title: "✅ Attendance Marked!",
@@ -115,9 +137,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
                     self.navigationController?.popViewController(animated: true)
                 })
                 self.present(alert, animated: true)
-                
             case .failure(let error):
-                // Failed
                 print("Check-in failed: \(error.localizedDescription)")
                 let alert = UIAlertController(
                     title: "❌ Check-in Failed",
@@ -125,7 +145,6 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "Try Again", style: .default) { _ in
-                    // Restart camera
                     DispatchQueue.global(qos: .userInitiated).async {
                         self.captureSession.startRunning()
                     }
@@ -137,19 +156,12 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
             }
         }
     }
-    func showAlert(message: String) {
+    
+    private func showAlert(message: String) {
         let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
             self.navigationController?.popViewController(animated: true)
         })
         present(alert, animated: true)
-    }
-    
-    override var prefersStatusBarHidden: Bool {
-        return true
-    }
-    
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return .portrait
     }
 }
