@@ -9,7 +9,6 @@ import UIKit
 import FirebaseFirestore
 import CoreImage
 
-
 class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
     
     @IBOutlet weak var qrCodeImageView: UIImageView!
@@ -17,7 +16,6 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     @IBOutlet weak var attendeeTableView: UITableView!
 
     var sessionId: String = ""
-    var hostId: String = ""  // This goes in the QR code
     var participants: [ParticipantInfo] = []
     var listener: ListenerRegistration?
     
@@ -32,8 +30,16 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     }
     
     func createSession() {
-        // You can customize the session name or ask the user
         let sessionName = "Attendance Session"
+        
+        // Debug: Check if user is logged in
+        if let userID = FirebaseManager.shared.getCurrentUserID() {
+            print("✅ Current user ID: \(userID)")
+        } else {
+            print("❌ No user logged in!")
+            showAlert(message: "Please log in first")
+            return
+        }
         
         FirebaseManager.shared.createSession(sessionName: sessionName) { result in
             switch result {
@@ -41,8 +47,9 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                 self.sessionId = sessionId
 
                 print("✅ Session created!")
-                print("   sessionId (Firestore doc): \(sessionId)")
+                print("   sessionId: \(sessionId)")
                 
+                // Create QR code payload with JSON
                 if let jsonString = self.makeQRPayloadJSON(sessionId: sessionId, sessionName: sessionName),
                    let qrImage = self.generateQRCode(from: jsonString) {
                     print("📦 QR payload: \(jsonString)")
@@ -52,7 +59,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                     self.qrCodeImageView.image = self.generateQRCode(from: sessionId)
                 }
                 
-                // Start listening for attendees
+                // Start listening for participants
                 self.startListening()
                 
             case .failure(let error):
@@ -79,14 +86,20 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     func startListening() {
         listener = FirebaseManager.shared.listenToSession(sessionId: sessionId) { participants in
             print("📢 Participants updated: \(participants.count) total")
+            
+            // Debug: Print each participant
+            for participant in participants {
+                print("   - \(participant.participantDisplayName) (\(participant.participantEmail))")
+            }
+            
             self.participants = participants
-            self.updateParticipantsCount()
+            self.updateParticipantCount()
             self.attendeeTableView.reloadData()
         }
     }
     
-    func updateParticipantsCount() {
-        attendeeCountLabel.text = "Participants: \(participants.count)"
+    func updateParticipantCount() {
+        attendeeCountLabel.text = "Attendees: \(participants.count)"
     }
     
     func generateQRCode(from string: String) -> UIImage? {
@@ -115,9 +128,13 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "AttendeeCell") ?? UITableViewCell(style: .subtitle, reuseIdentifier: "AttendeeCell")
+        
         let participant = participants[indexPath.row]
-        cell.textLabel?.text = participant.displayName
-        cell.detailTextLabel?.text = participant.email
+        
+        // Use the correct field names from ParticipantInfo struct
+        cell.textLabel?.text = participant.participantDisplayName
+        cell.detailTextLabel?.text = participant.participantEmail
+        
         return cell
     }
     
@@ -165,4 +182,3 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         listener?.remove()
     }
 }
-

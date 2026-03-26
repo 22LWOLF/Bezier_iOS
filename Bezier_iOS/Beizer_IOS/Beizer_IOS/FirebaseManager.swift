@@ -50,8 +50,8 @@ class FirebaseManager {
             
             // Create user document in Firestore
             let userData: [String: Any] = [
-                "participantemail": email,
-                "participantDisplayName": "\(firstName) \(lastName)",
+                "participantEmail": email,
+                "participantDisplayName": email,
                 "createdAt": Int(Date().timeIntervalSince1970 * 1000),
                 "participantId": userID
             ]
@@ -134,16 +134,29 @@ class FirebaseManager {
     
     func joinSession(sessionID: String, completion: @escaping (Result<String, Error>) -> Void) {
         guard let userID = getCurrentUserID() else {
+            print("❌ No user ID - user not logged in")
             completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])))
             return
         }
         
         print("🔍 Attempting to join session: \(sessionID)")
+        print("🔍 Current user ID: \(userID)")
         
         // First, get user info
+        // ADD IN A WAY FOR USER TO HAVE A DISPLAY NAME
         getUserInfo { userResult in
             switch userResult {
             case .success(let userData):
+                print("✅ Got user data from Firestore:")
+                print("   Raw data: \(userData)")
+                
+                // Extract fields with detailed logging
+                let email = userData["email"] as? String ?? userData["participantemail"] as? String
+                let displayName = userData["email"] as? String ?? userData["participantDisplayName"] as? String
+            
+                print("   participantemail: \(email ?? "NIL")")
+                print("   participantDisplayName: \(displayName ?? "NIL")")
+                
                 // Get the session document directly using sessionID
                 self.db.collection("attendance_sessions").document(sessionID).getDocument { snapshot, error in
                     
@@ -173,17 +186,21 @@ class FirebaseManager {
                                 return
                             }
                             
+                            // Use email as fallback for display name
+                            let finalEmail = email ?? "Unknown"
+                            let finalDisplayName = displayName ?? email ?? "Unknown"
+                            
                             // Add user to participants subcollection
                             let participantData: [String: Any] = [
                                 "participantId": userID,
-                                "participantEmail": userData["participantEmail"] as? String ?? "Unknown",
-                                // change to be dictonary
-                                "participantDisplayName": userData["participantDisplayName"] as? String ?? "Unknown",
+                                "participantEmail": finalEmail,
+                                "participantDisplayName": finalDisplayName,
                                 "checkedInAt": Int(Date().timeIntervalSince1970 * 1000),
                                 "sessionId": sessionID
                             ]
                             
-                            print("📝 Adding participant to session")
+                            print("📝 Participant data to be written:")
+                            print("   \(participantData)")
                             
                             self.db.collection("attendance_sessions").document(sessionID)
                                 .collection("participants").document(userID).setData(participantData) { error in
@@ -194,6 +211,8 @@ class FirebaseManager {
                                         return
                                     }
                                     
+                                    print("✅ Participant document written successfully!")
+                                    
                                     // Increment attendee count
                                     self.db.collection("attendance_sessions").document(sessionID)
                                         .updateData([
@@ -201,6 +220,8 @@ class FirebaseManager {
                                         ]) { error in
                                             if let error = error {
                                                 print("⚠️ Failed to increment count: \(error)")
+                                            } else {
+                                                print("✅ Attendee count incremented")
                                             }
                                             
                                             print("✅ Successfully joined session!")
@@ -216,7 +237,7 @@ class FirebaseManager {
             }
         }
     }
-    
+  
     func listenToSession(sessionId: String, onUpdate: @escaping ([ParticipantInfo]) -> Void) -> ListenerRegistration {
         
         print("👂 Starting to listen to session: \(sessionId)")
@@ -241,13 +262,16 @@ class FirebaseManager {
                 
                 let participants = documents.compactMap { doc -> ParticipantInfo? in
                     let data = doc.data()
+                    
+                    // Debug: print what we're receiving
+                    print("📄 Participant data: \(data)")
+                    
                     return ParticipantInfo(
-                        userId: data["userId"] as? String ?? "",
-                        email: data["email"] as? String ?? "",
-                        displayName: data["displayName"] as? String ?? "Unknown",
-                        firstName: data["firstName"] as? String ?? "",
-                        lastName: data["lastName"] as? String ?? "",
-                        checkedInAt: data["checkedInAt"] as? Int ?? 0
+                        participantId: data["participantId"] as? String ?? "",
+                        participantEmail: data["participantEmail"] as? String ?? "Unknown",
+                        participantDisplayName: data["participantDisplayName"] as? String ?? "Unknown",
+                        checkedInAt: data["checkedInAt"] as? Int ?? 0,
+                        sessionId: data["sessionId"] as? String ?? ""
                     )
                 }
                 
@@ -276,10 +300,9 @@ class FirebaseManager {
 // MARK: - Data Models
 
 struct ParticipantInfo {
-    let userId: String
-    let email: String
-    let displayName: String
-    let firstName: String
-    let lastName: String
+    let participantId: String
+    let participantEmail: String
+    let participantDisplayName: String
     let checkedInAt: Int
+    let sessionId: String
 }
