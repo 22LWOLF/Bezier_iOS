@@ -8,6 +8,8 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import FirebaseStorage
+import UIKit
 
 class FirebaseManager {
     
@@ -36,6 +38,87 @@ class FirebaseManager {
         }
     }
     
+    // MARK: - Kick and Ban Management
+
+    func kickParticipant(sessionId: String, participantId: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        print("🚫 Kicking participant: \(participantId) from session: \(sessionId)")
+        
+        // Remove from participants subcollection
+        db.collection("attendance_sessions").document(sessionId)
+            .collection("participants").document(participantId).delete { error in
+                
+                if let error = error {
+                    print("❌ Failed to kick participant: \(error.localizedDescription)")
+                    completion(.failure(error))
+                    return
+                }
+                
+                // Decrement attendee count
+                self.db.collection("attendance_sessions").document(sessionId)
+                    .updateData([
+                        "attendeeCount": FieldValue.increment(Int64(-1))
+                    ]) { error in
+                        if let error = error {
+                            print("⚠️ Failed to decrement count: \(error)")
+                        }
+                        
+                        print("✅ Participant kicked successfully")
+                        completion(.success(true))
+                    }
+            }
+    }
+
+    func banParticipant(sessionId: String, participantId: String, participantEmail: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+        print("🚫 Banning participant: \(participantId) from session: \(sessionId)")
+        
+        // Add to banned list
+        let banData: [String: Any] = [
+            "participantId": participantId,
+            "participantEmail": participantEmail,
+            "bannedAt": Int(Date().timeIntervalSince1970 * 1000),
+            "sessionId": sessionId
+        ]
+        
+        db.collection("attendance_sessions").document(sessionId)
+            .collection("banned").document(participantId).setData(banData) { error in
+                
+                if let error = error {
+                    print("❌ Failed to ban participant: \(error.localizedDescription)")
+                    completion(.failure(error))
+                    return
+                }
+                
+                // Also kick them from the session
+                self.kickParticipant(sessionId: sessionId, participantId: participantId) { result in
+                    switch result {
+                    case .success:
+                        print("✅ Participant banned and kicked")
+                        completion(.success(true))
+                    case .failure(let error):
+                        print("⚠️ Banned but failed to kick: \(error)")
+                        completion(.success(true)) // Still consider it success since they're banned
+                    }
+                }
+            }
+    }
+
+    func checkIfBanned(sessionId: String, participantId: String, completion: @escaping (Bool) -> Void) {
+        db.collection("attendance_sessions").document(sessionId)
+            .collection("banned").document(participantId).getDocument { snapshot, error in
+                
+                if let error = error {
+                    print("⚠️ Error checking ban status: \(error.localizedDescription)")
+                    completion(false)
+                    return
+                }
+                
+                let isBanned = snapshot?.exists ?? false
+                if isBanned {
+                    print("🚫 User is banned from this session")
+                }
+                completion(isBanned)
+            }
+    }
     func register(email: String, password: String, firstName: String, lastName: String, completion: @escaping (Result<String, Error>) -> Void) {
         auth.createUser(withEmail: email, password: password) { result, error in
             if let error = error {
@@ -48,18 +131,24 @@ class FirebaseManager {
                 return
             }
             
-            // Create user document in Firestore
+            // Create user document in Firestore with actual names
             let userData: [String: Any] = [
-                "participantEmail": email,
-                "participantDisplayName": email,
+                "email": email,
+                "participantemail": email,
+                "displayName": "\(firstName) \(lastName)",
+                "participantDisplayName": "\(firstName) \(lastName)",
+                "firstName": firstName,
+                "lastName": lastName,
                 "createdAt": Int(Date().timeIntervalSince1970 * 1000),
-                "participantId": userID
+                "participantId": userID,
+                "profilePhotoURL": "" // Empty initially, will be updated when photo is uploaded
             ]
             
             self.db.collection("users").document(userID).setData(userData) { error in
                 if let error = error {
                     completion(.failure(error))
                 } else {
+                    print("✅ User document created with name: \(firstName) \(lastName)")
                     completion(.success(userID))
                 }
             }
@@ -72,6 +161,85 @@ class FirebaseManager {
     
     func getCurrentUserEmail() -> String? {
         return auth.currentUser?.email
+    }
+    
+    // MARK: - Profile Photo Management
+
+    func uploadProfilePhoto(image: UIImage, completion: @escaping (Result<String, Error>) -> Void) {
+        guard let userID = getCurrentUserID() else {
+            completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])))
+            return
+        }
+        
+        // Compress image
+        guard let imageData = image.jpegData(compressionQuality: 0.5) else {
+            completion(.failure(NSError(domain: "Image", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to compress image"])))
+            return
+        }
+        
+        // Create storage reference
+        let storageRef = Storage.storage().reference()
+        let profilePhotoRef = storageRef.child("profile_photos/\(userID).jpg")
+        
+        // Upload
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        
+        profilePhotoRef.putData(imageData, metadata: metadata) { metadata, error in
+            if let error = error {
+                print("❌ Upload failed: \(error.localizedDescription)")
+                completion(.failure(error))
+                return
+            }
+            
+            // Get download URL
+            profilePhotoRef.downloadURL { url, error in
+                if let error = error {
+                    print("❌ Failed to get download URL: \(error.localizedDescription)")
+                    completion(.failure(error))
+                    return
+                }
+                
+                guard let downloadURL = url?.absoluteString else {
+                    completion(.failure(NSError(domain: "Storage", code: -1, userInfo: [NSLocalizedDescriptionKey: "No download URL"])))
+                    return
+                }
+                
+                // Update user document with photo URL
+                self.db.collection("users").document(userID).updateData([
+                    "profilePhotoURL": downloadURL
+                ]) { error in
+                    if let error = error {
+                        print("❌ Failed to update user document: \(error.localizedDescription)")
+                        completion(.failure(error))
+                    } else {
+                        print("✅ Profile photo uploaded and URL saved: \(downloadURL)")
+                        completion(.success(downloadURL))
+                    }
+                }
+            }
+        }
+    }
+
+    func downloadProfilePhoto(url: String, completion: @escaping (Result<UIImage, Error>) -> Void) {
+        guard let imageURL = URL(string: url) else {
+            completion(.failure(NSError(domain: "URL", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
+            return
+        }
+        
+        URLSession.shared.dataTask(with: imageURL) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+            
+            guard let data = data, let image = UIImage(data: data) else {
+                completion(.failure(NSError(domain: "Image", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to load image"])))
+                return
+            }
+            
+            completion(.success(image))
+        }.resume()
     }
     
     // MARK: - Get User Info
@@ -143,7 +311,6 @@ class FirebaseManager {
         print("🔍 Current user ID: \(userID)")
         
         // First, get user info
-        // ADD IN A WAY FOR USER TO HAVE A DISPLAY NAME
         getUserInfo { userResult in
             switch userResult {
             case .success(let userData):
@@ -153,13 +320,12 @@ class FirebaseManager {
                 // Extract fields with detailed logging
                 let email = userData["email"] as? String ?? userData["participantemail"] as? String
                 let displayName = userData["email"] as? String ?? userData["participantDisplayName"] as? String
-            
+                
                 print("   participantemail: \(email ?? "NIL")")
                 print("   participantDisplayName: \(displayName ?? "NIL")")
                 
                 // Get the session document directly using sessionID
                 self.db.collection("attendance_sessions").document(sessionID).getDocument { snapshot, error in
-                    
                     if let error = error {
                         print("❌ Error getting session: \(error.localizedDescription)")
                         completion(.failure(error))
@@ -176,59 +342,66 @@ class FirebaseManager {
                     
                     print("✅ Session found and active")
                     
-                    // Check if user already attended
-                    self.db.collection("attendance_sessions").document(sessionID)
-                        .collection("participants").document(userID).getDocument { participantDoc, error in
-                            
-                            if participantDoc?.exists == true {
-                                print("⚠️ User already checked in")
-                                completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already checked in to this session"])))
-                                return
-                            }
-                            
-                            // Use email as fallback for display name
-                            let finalEmail = email ?? "Unknown"
-                            let finalDisplayName = displayName ?? email ?? "Unknown"
-                            
-                            // Add user to participants subcollection
-                            let participantData: [String: Any] = [
-                                "participantId": userID,
-                                "participantEmail": finalEmail,
-                                "participantDisplayName": finalDisplayName,
-                                "checkedInAt": Int(Date().timeIntervalSince1970 * 1000),
-                                "sessionId": sessionID
-                            ]
-                            
-                            print("📝 Participant data to be written:")
-                            print("   \(participantData)")
-                            
-                            self.db.collection("attendance_sessions").document(sessionID)
-                                .collection("participants").document(userID).setData(participantData) { error in
-                                    
-                                    if let error = error {
-                                        print("❌ Failed to add participant: \(error.localizedDescription)")
-                                        completion(.failure(error))
-                                        return
-                                    }
-                                    
-                                    print("✅ Participant document written successfully!")
-                                    
-                                    // Increment attendee count
-                                    self.db.collection("attendance_sessions").document(sessionID)
-                                        .updateData([
-                                            "attendeeCount": FieldValue.increment(Int64(1))
-                                        ]) { error in
-                                            if let error = error {
-                                                print("⚠️ Failed to increment count: \(error)")
-                                            } else {
-                                                print("✅ Attendee count incremented")
-                                            }
-                                            
-                                            print("✅ Successfully joined session!")
-                                            completion(.success(sessionID))
-                                        }
-                                }
+                    self.checkIfBanned(sessionId: sessionID, participantId: userID) { isBanned in
+                        if isBanned {
+                            print("🚫 User is banned from this session")
+                            completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "You have been banned from this session"])))
+                            return
                         }
+                        
+                        // Check if user already attended
+                        self.db.collection("attendance_sessions").document(sessionID)
+                            .collection("participants").document(userID).getDocument { participantDoc, error in
+                                if participantDoc?.exists == true {
+                                    print("⚠️ User already checked in")
+                                    completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already checked in to this session"])))
+                                    return
+                                }
+                                
+                                // Use email as fallback for display name
+                                let finalEmail = email ?? "Unknown"
+                                let finalDisplayName = displayName ?? email ?? "Unknown"
+                                
+                                // Add user to participants subcollection
+                                let participantData: [String: Any] = [
+                                    "participantId": userID,
+                                    "participantEmail": finalEmail,
+                                    "participantDisplayName": finalDisplayName,
+                                    "profilePhotoURL": userData["profilePhotoURL"] as? String ?? "",
+                                    "checkedInAt": Int(Date().timeIntervalSince1970 * 1000),
+                                    "sessionId": sessionID
+                                ]
+                                
+                                print("📝 Participant data to be written:")
+                                print("   \(participantData)")
+                                
+                                self.db.collection("attendance_sessions").document(sessionID)
+                                    .collection("participants").document(userID).setData(participantData) { error in
+                                        if let error = error {
+                                            print("❌ Failed to add participant: \(error.localizedDescription)")
+                                            completion(.failure(error))
+                                            return
+                                        }
+                                        
+                                        print("✅ Participant document written successfully!")
+                                        
+                                        // Increment attendee count
+                                        self.db.collection("attendance_sessions").document(sessionID)
+                                            .updateData([
+                                                "attendeeCount": FieldValue.increment(Int64(1))
+                                            ]) { error in
+                                                if let error = error {
+                                                    print("⚠️ Failed to increment count: \(error)")
+                                                } else {
+                                                    print("✅ Attendee count incremented")
+                                                }
+                                                
+                                                print("✅ Successfully joined session!")
+                                                completion(.success(sessionID))
+                                            }
+                                    }
+                            }
+                    }
                 }
                 
             case .failure(let error):
@@ -259,21 +432,19 @@ class FirebaseManager {
                 }
                 
                 print("📢 Participants updated: \(documents.count) total")
-                
+                    
                 let participants = documents.compactMap { doc -> ParticipantInfo? in
                     let data = doc.data()
-                    
-                    // Debug: print what we're receiving
-                    print("📄 Participant data: \(data)")
-                    
-                    return ParticipantInfo(
-                        participantId: data["participantId"] as? String ?? "",
-                        participantEmail: data["participantEmail"] as? String ?? "Unknown",
-                        participantDisplayName: data["participantDisplayName"] as? String ?? "Unknown",
-                        checkedInAt: data["checkedInAt"] as? Int ?? 0,
-                        sessionId: data["sessionId"] as? String ?? ""
-                    )
-                }
+                        
+                        return ParticipantInfo(
+                            participantId: data["participantId"] as? String ?? "",
+                            participantEmail: data["participantEmail"] as? String ?? "Unknown",
+                            participantDisplayName: data["participantDisplayName"] as? String ?? "Unknown",
+                            profilePhotoURL: data["profilePhotoURL"] as? String ?? "",  // ← Add this
+                            checkedInAt: data["checkedInAt"] as? Int ?? 0,
+                            sessionId: data["sessionId"] as? String ?? ""
+                        )
+                    }
                 
                 onUpdate(participants)
             }
@@ -297,12 +468,3 @@ class FirebaseManager {
     }
 }
 
-// MARK: - Data Models
-
-struct ParticipantInfo {
-    let participantId: String
-    let participantEmail: String
-    let participantDisplayName: String
-    let checkedInAt: Int
-    let sessionId: String
-}

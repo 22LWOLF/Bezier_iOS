@@ -11,7 +11,7 @@ import FirebaseCore
 import FirebaseAuth
       
 
-class ViewController: UIViewController {
+class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavigationControllerDelegate {
     
     
     
@@ -82,7 +82,9 @@ class ViewController: UIViewController {
                     presentAuthAlert(title: "Missing Info", message: "Please enter both email and password")
                     return
             }
-            
+         
+        
+        
 
         // Scale button on tap
         UIView.animate(withDuration: 0.1, animations: {
@@ -119,42 +121,94 @@ class ViewController: UIViewController {
 
     @IBAction func registerButtonTapped(_ sender: UIButton) {
         let email = emailTextField.text ?? ""
-               let password = passwordTextField.text ?? ""
+           let password = passwordTextField.text ?? ""
+           
+           guard !email.isEmpty, !password.isEmpty else {
+               presentAuthAlert(title: "Missing Info", message: "Please enter both email and password to register.")
+               return
+           }
+           
+           // Show popup to get first and last name
+           showNameInputPopup(email: email, password: password)
+       }
+
+       func showNameInputPopup(email: String, password: String) {
+           let alert = UIAlertController(title: "Complete Registration", message: "Please enter your name", preferredStyle: .alert)
+           
+           // Add text fields for first and last name
+           alert.addTextField { textField in
+               textField.placeholder = "First Name"
+               textField.autocapitalizationType = .words
+           }
+           
+           alert.addTextField { textField in
+               textField.placeholder = "Last Name"
+               textField.autocapitalizationType = .words
+           }
+           
+           // Cancel button
+           alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+           
+           // Register button
+           alert.addAction(UIAlertAction(title: "Register", style: .default) { _ in
+               let firstName = alert.textFields?[0].text ?? ""
+               let lastName = alert.textFields?[1].text ?? ""
                
-               // For now, we'll use placeholder names - you can add name fields later
-               let firstName = "New"
-               let lastName = "User"
-               
-               guard !email.isEmpty, !password.isEmpty else {
-                   presentAuthAlert(title: "Missing Info", message: "Please enter both email and password to register.")
+               guard !firstName.isEmpty, !lastName.isEmpty else {
+                   self.presentAuthAlert(title: "Missing Name", message: "Please enter both first and last name.")
+                   self.showNameInputPopup(email: email, password: password) // Show popup again
                    return
                }
                
-               sender.isEnabled = false
-               let originalTitle = sender.title(for: .normal)
-               sender.setTitle("Registering...", for: .normal)
-               
-               FirebaseManager.shared.register(email: email, password: password, firstName: firstName, lastName: lastName) { result in
-                   DispatchQueue.main.async {
-                       sender.isEnabled = true
-                       sender.setTitle(originalTitle, for: .normal)
+               // Now register with all info
+               self.performRegistration(email: email, password: password, firstName: firstName, lastName: lastName)
+           })
+           
+           present(alert, animated: true)
+       }
+
+       func performRegistration(email: String, password: String, firstName: String, lastName: String) {
+           FirebaseManager.shared.register(email: email, password: password, firstName: firstName, lastName: lastName) { result in
+               DispatchQueue.main.async {
+                   switch result {
+                   case .success(let userID):
+                       print("✅ Registered successfully! User ID: \(userID)")
+                       self.presentAuthAlert(title: "Success", message: "Account created! Now add a profile photo.")
                        
-                       switch result {
-                       case .success(let userID):
-                           print("✅ Registered successfully! User ID: \(userID)")
-                           self.presentAuthAlert(title: "Success", message: "Account created successfully!")
-                           // Automatically go to home after successful registration
-                           DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                               self.performSegue(withIdentifier: "goToHome", sender: self)
-                           }
-                           
-                       case .failure(let error):
-                           print("❌ Registration failed: \(error.localizedDescription)")
-                           self.presentAuthAlert(title: "Registration Failed", message: error.localizedDescription)
+                       // Show photo picker after registration
+                       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                           self.showPhotoPickerAfterRegistration()
                        }
+                       
+                   case .failure(let error):
+                       print("❌ Registration failed: \(error.localizedDescription)")
+                       self.presentAuthAlert(title: "Registration Failed", message: error.localizedDescription)
                    }
                }
            }
+       }
+
+       func showPhotoPickerAfterRegistration() {
+           let alert = UIAlertController(title: "Profile Photo", message: "Would you like to add a profile photo?", preferredStyle: .alert)
+           
+           alert.addAction(UIAlertAction(title: "Add Photo", style: .default) { _ in
+               self.openPhotoPicker()
+           })
+           
+           alert.addAction(UIAlertAction(title: "Skip for Now", style: .cancel) { _ in
+               self.performSegue(withIdentifier: "goToHome", sender: self)
+           })
+           
+           present(alert, animated: true)
+       }
+
+       func openPhotoPicker() {
+           let picker = UIImagePickerController()
+           picker.delegate = self
+           picker.sourceType = .photoLibrary
+           picker.allowsEditing = true
+           present(picker, animated: true)
+       }
     
     func shakeView(_ view: UIView) {
         let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
