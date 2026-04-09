@@ -1,7 +1,7 @@
 import UIKit
 import AVFoundation
 
-class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
+class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate, UIGestureRecognizerDelegate {
     
     var captureSession: AVCaptureSession!
     var previewLayer: AVCaptureVideoPreviewLayer!
@@ -13,6 +13,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         super.viewDidLoad()
         
         view.backgroundColor = UIColor.black
+        installGlobalRipple()
         
         // Set up the capture session
         captureSession = AVCaptureSession()
@@ -69,6 +70,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         animateScannerOverlay()
+        VisualEffects.applyParallax(to: scanFrameView, amount: 14)
         
         if captureSession?.isRunning == false {
             DispatchQueue.global(qos: .userInitiated).async {
@@ -91,6 +93,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         
         captureSession.stopRunning()
         animateScanSuccess()
+        VisualEffects.sparkleBurst(at: CGPoint(x: view.bounds.midX, y: view.bounds.midY), in: view, colors: [.systemYellow, .systemMint, .systemBlue, .systemPink])
         
         if let metadataObject = metadataObjects.first {
             guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
@@ -192,11 +195,12 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         scanFrameView.addSubview(scanLineView)
 
         scanFrameView.alpha = 0
-        scanFrameView.animateEntrance(delay: 0.05, from: 0, translationY: 20)
+        VisualEffects.heroEntrance(scanFrameView, delay: 0.05, translateY: 20)
+        VisualEffects.glowPulse(on: scanFrameView, color: .systemMint)
     }
 
     private func animateScannerOverlay() {
-        guard !UIView.shouldReduceMotion else { return }
+        guard !VisualEffects.shouldReduceMotion else { return }
         guard scanLineView.layer.animation(forKey: "scannerLineLoop") == nil else { return }
 
         let animation = CABasicAnimation(keyPath: "position.y")
@@ -215,7 +219,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         scanFrameView.layer.removeAllAnimations()
         scanLineView.layer.removeAllAnimations()
 
-        if UIView.shouldReduceMotion {
+        if VisualEffects.shouldReduceMotion {
             UIView.animate(withDuration: 0.15) {
                 self.scanFrameView.alpha = 0
             }
@@ -231,5 +235,20 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
                 self.scanFrameView.alpha = 0
             }
         }
+    }
+
+    private func installGlobalRipple() {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleBackgroundTap(_ gesture: UITapGestureRecognizer) {
+        VisualEffects.ripple(at: gesture.location(in: view), in: view, color: .systemMint)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !(touch.view is UIControl)
     }
 }

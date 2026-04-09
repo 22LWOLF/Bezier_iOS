@@ -10,61 +10,7 @@ import AVFoundation
 import FirebaseCore
 import FirebaseAuth
       
-extension UIView {
-    static var shouldReduceMotion: Bool {
-        UIAccessibility.isReduceMotionEnabled
-    }
-
-    func animatePlayfulTap(completion: (() -> Void)? = nil) {
-        guard !UIView.shouldReduceMotion else {
-            completion?()
-            return
-        }
-
-        UIView.animate(withDuration: 0.09, delay: 0, options: [.curveEaseOut], animations: {
-            self.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
-        }) { _ in
-            UIView.animate(withDuration: 0.24, delay: 0, usingSpringWithDamping: 0.45, initialSpringVelocity: 4.0, options: [.curveEaseInOut], animations: {
-                self.transform = .identity
-            }) { _ in
-                completion?()
-            }
-        }
-    }
-
-    func animateEntrance(delay: TimeInterval = 0, from translationX: CGFloat = -36, translationY: CGFloat = 0) {
-        if UIView.shouldReduceMotion {
-            alpha = 0
-            transform = .identity
-            UIView.animate(withDuration: 0.18, delay: delay, options: [.curveEaseOut], animations: {
-                self.alpha = 1
-            })
-            return
-        }
-
-        alpha = 0
-        transform = CGAffineTransform(translationX: translationX, y: translationY)
-        UIView.animate(withDuration: 0.62, delay: delay, usingSpringWithDamping: 0.74, initialSpringVelocity: 0.45, options: [.curveEaseOut], animations: {
-            self.alpha = 1
-            self.transform = .identity
-        })
-    }
-
-    func animateSoftPulse() {
-        guard !UIView.shouldReduceMotion else { return }
-        transform = .identity
-        UIView.animate(withDuration: 0.2, animations: {
-            self.transform = CGAffineTransform(scaleX: 1.06, y: 1.06)
-        }) { _ in
-            UIView.animate(withDuration: 0.2) {
-                self.transform = .identity
-            }
-        }
-    }
-}
-
-
-class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavigationControllerDelegate {
+class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     
     
     
@@ -87,13 +33,16 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         // Style the text fields
                 styleTextField(emailTextField)
                 styleTextField(passwordTextField)
+        installGlobalRipple()
     }
     
     override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             
-            emailTextField.animateEntrance(delay: 0.08, from: -52)
-            passwordTextField.animateEntrance(delay: 0.2, from: -52)
+            heroEntrance(emailTextField, delay: 0.04, translateY: 18)
+            heroEntrance(passwordTextField, delay: 0.16, translateY: 18)
+            glowPulse(on: emailTextField, color: .systemBlue)
+            glowPulse(on: passwordTextField, color: .systemIndigo)
         }
 
     
@@ -125,7 +74,10 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         
         
 
-        sender.animatePlayfulTap()
+        animatePlayfulTap(sender)
+        let localPoint = sender.superview?.convert(sender.center, to: view) ?? view.center
+        ripple(at: localPoint, in: view, color: .systemBlue)
+        glowPulse(on: sender, color: .systemBlue)
         
         // Use FirebaseManager to login
                 sender.isEnabled = false
@@ -140,7 +92,8 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
                         switch result {
                         case .success(let userID):
                             print("Logged in successfully! User ID: \(userID)")
-                            self.view.animateSoftPulse()
+                            self.animateSoftPulse(self.view)
+                            self.sparkleBurst(at: CGPoint(x: self.view.bounds.midX, y: self.view.bounds.midY), in: self.view)
                             self.performSegue(withIdentifier: "goToHome", sender: self)
                             
                         case .failure(let error):
@@ -153,7 +106,10 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
             }
 
     @IBAction func registerButtonTapped(_ sender: UIButton) {
-        sender.animatePlayfulTap()
+        animatePlayfulTap(sender)
+        let localPoint = sender.superview?.convert(sender.center, to: view) ?? view.center
+        ripple(at: localPoint, in: view, color: .systemPurple)
+        glowPulse(on: sender, color: .systemPurple)
         let email = emailTextField.text ?? ""
            let password = passwordTextField.text ?? ""
            
@@ -275,6 +231,123 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
            alert.addAction(UIAlertAction(title: "OK", style: .default))
            self.present(alert, animated: true)
        }
-   }
+    
+    private func installGlobalRipple() {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleBackgroundTap(_ gesture: UITapGestureRecognizer) {
+        let point = gesture.location(in: view)
+        ripple(at: point, in: view, color: .systemTeal)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !(touch.view is UIControl)
+    }
+
+    private var shouldReduceMotion: Bool {
+        UIAccessibility.isReduceMotionEnabled
+    }
+
+    private func heroEntrance(_ target: UIView, delay: TimeInterval, translateY: CGFloat) {
+        target.alpha = 0
+        target.transform = CGAffineTransform(translationX: 0, y: translateY).scaledBy(x: 0.94, y: 0.94)
+        UIView.animate(withDuration: shouldReduceMotion ? 0.2 : 0.55, delay: delay, usingSpringWithDamping: shouldReduceMotion ? 1.0 : 0.66, initialSpringVelocity: 0.3, options: [.curveEaseOut], animations: {
+            target.alpha = 1
+            target.transform = .identity
+        })
+    }
+
+    private func animatePlayfulTap(_ target: UIView) {
+        guard !shouldReduceMotion else { return }
+        UIView.animate(withDuration: 0.09, animations: {
+            target.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
+        }) { _ in
+            UIView.animate(withDuration: 0.24, delay: 0, usingSpringWithDamping: 0.45, initialSpringVelocity: 4.0, options: [.curveEaseOut], animations: {
+                target.transform = .identity
+            })
+        }
+    }
+
+    private func animateSoftPulse(_ target: UIView) {
+        guard !shouldReduceMotion else { return }
+        UIView.animate(withDuration: 0.16, animations: {
+            target.transform = CGAffineTransform(scaleX: 1.06, y: 1.06)
+        }) { _ in
+            UIView.animate(withDuration: 0.16) {
+                target.transform = .identity
+            }
+        }
+    }
+
+    private func glowPulse(on target: UIView, color: UIColor) {
+        target.layer.shadowColor = color.cgColor
+        target.layer.shadowOffset = .zero
+        target.layer.shadowRadius = 4
+        target.layer.shadowOpacity = 0.2
+        let pulse = CABasicAnimation(keyPath: "shadowOpacity")
+        pulse.fromValue = 0.1
+        pulse.toValue = 0.9
+        pulse.duration = shouldReduceMotion ? 0.16 : 0.24
+        pulse.autoreverses = true
+        target.layer.add(pulse, forKey: "vcGlowPulse")
+    }
+
+    private func ripple(at point: CGPoint, in container: UIView, color: UIColor) {
+        let diameter = max(container.bounds.width, container.bounds.height) * 0.32
+        let path = UIBezierPath(ovalIn: CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter))
+        let ring = CAShapeLayer()
+        ring.path = path.cgPath
+        ring.fillColor = color.withAlphaComponent(0.14).cgColor
+        ring.strokeColor = color.withAlphaComponent(0.45).cgColor
+        ring.lineWidth = 1.8
+        container.layer.addSublayer(ring)
+
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.15
+        scale.toValue = shouldReduceMotion ? 1.0 : 1.4
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.95
+        fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = shouldReduceMotion ? 0.25 : 0.62
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        group.fillMode = .forwards
+        group.isRemovedOnCompletion = false
+        ring.add(group, forKey: "vcRipple")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + group.duration) {
+            ring.removeFromSuperlayer()
+        }
+    }
+
+    private func sparkleBurst(at point: CGPoint, in container: UIView) {
+        guard !shouldReduceMotion else { return }
+        let emitter = CAEmitterLayer()
+        emitter.emitterPosition = point
+        emitter.emitterShape = .point
+        emitter.renderMode = .additive
+        let colors: [UIColor] = [.systemPink, .systemYellow, .systemTeal, .systemPurple]
+        emitter.emitterCells = colors.map { color in
+            let cell = CAEmitterCell()
+            cell.birthRate = 85
+            cell.lifetime = 0.95
+            cell.velocity = 130
+            cell.velocityRange = 45
+            cell.emissionRange = .pi * 2
+            cell.scale = 0.04
+            cell.alphaSpeed = -1.1
+            cell.contents = UIImage(systemName: "sparkle")?.withTintColor(color, renderingMode: .alwaysOriginal).cgImage
+            return cell
+        }
+        container.layer.addSublayer(emitter)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { emitter.birthRate = 0 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { emitter.removeFromSuperlayer() }
+    }
+}
 
 // .collection() .doc() stuff to access certain areas within the docs.

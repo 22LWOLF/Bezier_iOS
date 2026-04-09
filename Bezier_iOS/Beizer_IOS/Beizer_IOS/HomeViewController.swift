@@ -7,7 +7,7 @@
 
 import UIKit
 
-class HomeViewController: UIViewController {
+class HomeViewController: UIViewController, UIGestureRecognizerDelegate {
     private var hasAnimatedEntrance = false
     private var primaryButtons: [UIButton] {
         view.subviews.compactMap { $0 as? UIButton }.sorted { $0.frame.minY < $1.frame.minY }
@@ -16,6 +16,9 @@ class HomeViewController: UIViewController {
     
     
     @IBAction func joinSessionTapped(_ sender: UIButton) {
+        let origin = sender.superview?.convert(sender.center, to: view) ?? view.center
+        VisualEffects.ripple(at: origin, in: view, color: .systemMint)
+        VisualEffects.glowPulse(on: sender, color: .systemMint)
         sender.animatePlayfulTap { [weak self] in
             self?.performSegue(withIdentifier: "goToScanner", sender: self)
         }
@@ -23,6 +26,9 @@ class HomeViewController: UIViewController {
     
     
     @IBAction func hostSessionTapped(_ sender: UIButton) {
+        let origin = sender.superview?.convert(sender.center, to: view) ?? view.center
+        VisualEffects.ripple(at: origin, in: view, color: .systemOrange)
+        VisualEffects.glowPulse(on: sender, color: .systemOrange)
         sender.animatePlayfulTap { [weak self] in
             self?.performSegue(withIdentifier: "goToHost", sender: self)
         }
@@ -33,8 +39,7 @@ class HomeViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        // Do any additional setup after loading the view.
+        installGlobalRipple()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -43,8 +48,24 @@ class HomeViewController: UIViewController {
         hasAnimatedEntrance = true
 
         for (index, button) in primaryButtons.enumerated() {
-            button.animateEntrance(delay: TimeInterval(index) * 0.12, from: 0, translationY: 24)
+            VisualEffects.heroEntrance(button, delay: TimeInterval(index) * 0.12, translateY: 24)
+            VisualEffects.applyParallax(to: button, amount: 10)
         }
+    }
+
+    private func installGlobalRipple() {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleBackgroundTap(_ gesture: UITapGestureRecognizer) {
+        VisualEffects.ripple(at: gesture.location(in: view), in: view, color: .systemIndigo)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !(touch.view is UIControl)
     }
     
 

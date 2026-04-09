@@ -9,7 +9,7 @@ import UIKit
 import FirebaseFirestore
 import CoreImage
 
-class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
+class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource, UIGestureRecognizerDelegate {
     
     @IBOutlet weak var qrCodeImageView: UIImageView!
     @IBOutlet weak var attendeeCountLabel: UILabel!
@@ -19,6 +19,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     var participants: [ParticipantInfo] = []
     var listener: ListenerRegistration?
     private var previousParticipantCount: Int = 0
+    private var didAnimateEntrance = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -28,9 +29,19 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         attendeeCountLabel.text = "Attendees: 0"
         qrCodeImageView.alpha = 0
         qrCodeImageView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
+        installGlobalRipple()
+        VisualEffects.applyParallax(to: qrCodeImageView, amount: 14)
         
         // Create session in Firebase
         createSession()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !didAnimateEntrance else { return }
+        didAnimateEntrance = true
+        VisualEffects.heroEntrance(attendeeCountLabel, delay: 0.03, translateY: 12)
+        VisualEffects.heroEntrance(attendeeTableView, delay: 0.08, translateY: 20)
     }
     
     func createSession() {
@@ -109,6 +120,10 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         attendeeCountLabel.text = "Attendees: \(participants.count)"
         if participants.count != previousParticipantCount {
             attendeeCountLabel.animateSoftPulse()
+            VisualEffects.glowPulse(on: attendeeCountLabel, color: .systemTeal)
+            let burstPoint = CGPoint(x: attendeeCountLabel.frame.midX, y: attendeeCountLabel.frame.midY)
+            let converted = attendeeCountLabel.superview?.convert(burstPoint, to: view) ?? CGPoint(x: view.bounds.midX, y: attendeeCountLabel.frame.maxY)
+            VisualEffects.sparkleBurst(at: converted, in: view, colors: [.systemTeal, .systemYellow, .systemPurple])
             previousParticipantCount = participants.count
         }
     }
@@ -255,6 +270,9 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     
     @IBAction func endSessionTapped(_ sender: UIButton) {
         sender.animatePlayfulTap()
+        let origin = sender.superview?.convert(sender.center, to: view) ?? view.center
+        VisualEffects.ripple(at: origin, in: view, color: .systemRed)
+        VisualEffects.glowPulse(on: sender, color: .systemRed)
         let alert = UIAlertController(
             title: "End Session?",
             message: "Are you sure? \(participants.count) students checked in.",
@@ -297,7 +315,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     }
 
     private func animateQRCodeReveal() {
-        if UIView.shouldReduceMotion {
+        if VisualEffects.shouldReduceMotion {
             UIView.animate(withDuration: 0.2) {
                 self.qrCodeImageView.alpha = 1
                 self.qrCodeImageView.transform = .identity
@@ -308,7 +326,13 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: [.curveEaseOut], animations: {
             self.qrCodeImageView.alpha = 1
             self.qrCodeImageView.transform = .identity
-        })
+            self.qrCodeImageView.transform = self.qrCodeImageView.transform.rotated(by: 0.02)
+        }) { _ in
+            UIView.animate(withDuration: 0.14) {
+                self.qrCodeImageView.transform = .identity
+            }
+        }
+        VisualEffects.glowPulse(on: qrCodeImageView, color: .systemGreen)
     }
 
     private func animateParticipantListRefresh(from old: [ParticipantInfo], to new: [ParticipantInfo]) {
@@ -317,7 +341,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
 
         let inserted = newIds.subtracting(oldIds)
         let deleted = oldIds.subtracting(newIds)
-        if UIView.shouldReduceMotion {
+        if VisualEffects.shouldReduceMotion {
             attendeeTableView.reloadData()
             return
         }
@@ -326,6 +350,21 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         UIView.transition(with: attendeeTableView, duration: duration, options: [.transitionCrossDissolve], animations: {
             self.attendeeTableView.reloadData()
         })
+    }
+
+    private func installGlobalRipple() {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = self
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleBackgroundTap(_ gesture: UITapGestureRecognizer) {
+        VisualEffects.ripple(at: gesture.location(in: view), in: view, color: .systemCyan)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !(touch.view is UIControl)
     }
 }
 
