@@ -18,12 +18,16 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     var sessionId: String = ""
     var participants: [ParticipantInfo] = []
     var listener: ListenerRegistration?
+    private var previousParticipantCount: Int = 0
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
         attendeeTableView.delegate = self
         attendeeTableView.dataSource = self
+        attendeeCountLabel.text = "Attendees: 0"
+        qrCodeImageView.alpha = 0
+        qrCodeImageView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
         
         // Create session in Firebase
         createSession()
@@ -54,9 +58,11 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                    let qrImage = self.generateQRCode(from: jsonString) {
                     print("QR payload: \(jsonString)")
                     self.qrCodeImageView.image = qrImage
+                    self.animateQRCodeReveal()
                 } else {
                     print("Failed to build QR JSON payload, falling back to raw sessionId")
                     self.qrCodeImageView.image = self.generateQRCode(from: sessionId)
+                    self.animateQRCodeReveal()
                 }
                 
                 // Start listening for participants
@@ -86,6 +92,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     func startListening() {
         listener = FirebaseManager.shared.listenToSession(sessionId: sessionId) { participants in
             print("Participants updated: \(participants.count) total")
+            let previousParticipants = self.participants
             
             // Debug: Print each participant
             for participant in participants {
@@ -94,12 +101,16 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
             
             self.participants = participants
             self.updateParticipantCount()
-            self.attendeeTableView.reloadData()
+            self.animateParticipantListRefresh(from: previousParticipants, to: participants)
         }
     }
     
     func updateParticipantCount() {
         attendeeCountLabel.text = "Attendees: \(participants.count)"
+        if participants.count != previousParticipantCount {
+            attendeeCountLabel.animateSoftPulse()
+            previousParticipantCount = participants.count
+        }
     }
     
     func generateQRCode(from string: String) -> UIImage? {
@@ -243,6 +254,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     // MARK: - Actions
     
     @IBAction func endSessionTapped(_ sender: UIButton) {
+        sender.animatePlayfulTap()
         let alert = UIAlertController(
             title: "End Session?",
             message: "Are you sure? \(participants.count) students checked in.",
@@ -282,6 +294,38 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         listener?.remove()
+    }
+
+    private func animateQRCodeReveal() {
+        if UIView.shouldReduceMotion {
+            UIView.animate(withDuration: 0.2) {
+                self.qrCodeImageView.alpha = 1
+                self.qrCodeImageView.transform = .identity
+            }
+            return
+        }
+
+        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: [.curveEaseOut], animations: {
+            self.qrCodeImageView.alpha = 1
+            self.qrCodeImageView.transform = .identity
+        })
+    }
+
+    private func animateParticipantListRefresh(from old: [ParticipantInfo], to new: [ParticipantInfo]) {
+        let oldIds = Set(old.map { $0.participantId })
+        let newIds = Set(new.map { $0.participantId })
+
+        let inserted = newIds.subtracting(oldIds)
+        let deleted = oldIds.subtracting(newIds)
+        if UIView.shouldReduceMotion {
+            attendeeTableView.reloadData()
+            return
+        }
+
+        let duration: TimeInterval = (inserted.isEmpty && deleted.isEmpty) ? 0.18 : 0.32
+        UIView.transition(with: attendeeTableView, duration: duration, options: [.transitionCrossDissolve], animations: {
+            self.attendeeTableView.reloadData()
+        })
     }
 }
 

@@ -5,6 +5,9 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     
     var captureSession: AVCaptureSession!
     var previewLayer: AVCaptureVideoPreviewLayer!
+    private let scanFrameView = UIView()
+    private let scanLineView = UIView()
+    private var didAnimateSuccess = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -55,6 +58,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         previewLayer.frame = view.layer.bounds
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
+        setupScannerOverlay()
         
         // Start the session
         DispatchQueue.global(qos: .userInitiated).async {
@@ -64,6 +68,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        animateScannerOverlay()
         
         if captureSession?.isRunning == false {
             DispatchQueue.global(qos: .userInitiated).async {
@@ -74,6 +79,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        scanLineView.layer.removeAllAnimations()
         
         if captureSession?.isRunning == true {
             captureSession.stopRunning()
@@ -84,6 +90,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
         
         captureSession.stopRunning()
+        animateScanSuccess()
         
         if let metadataObject = metadataObjects.first {
             guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
@@ -163,5 +170,66 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
             self.navigationController?.popViewController(animated: true)
         })
         present(alert, animated: true)
+    }
+
+    private func setupScannerOverlay() {
+        let side = min(view.bounds.width * 0.7, 280)
+        scanFrameView.frame = CGRect(
+            x: (view.bounds.width - side) / 2,
+            y: (view.bounds.height - side) / 2,
+            width: side,
+            height: side
+        )
+        scanFrameView.layer.cornerRadius = 18
+        scanFrameView.layer.borderWidth = 3
+        scanFrameView.layer.borderColor = UIColor.systemMint.cgColor
+        scanFrameView.backgroundColor = UIColor.systemMint.withAlphaComponent(0.08)
+        view.addSubview(scanFrameView)
+
+        scanLineView.frame = CGRect(x: 14, y: 10, width: side - 28, height: 4)
+        scanLineView.layer.cornerRadius = 2
+        scanLineView.backgroundColor = UIColor.systemGreen
+        scanFrameView.addSubview(scanLineView)
+
+        scanFrameView.alpha = 0
+        scanFrameView.animateEntrance(delay: 0.05, from: 0, translationY: 20)
+    }
+
+    private func animateScannerOverlay() {
+        guard !UIView.shouldReduceMotion else { return }
+        guard scanLineView.layer.animation(forKey: "scannerLineLoop") == nil else { return }
+
+        let animation = CABasicAnimation(keyPath: "position.y")
+        animation.fromValue = 10
+        animation.toValue = scanFrameView.bounds.height - 10
+        animation.duration = 1.25
+        animation.repeatCount = .infinity
+        animation.autoreverses = true
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        scanLineView.layer.add(animation, forKey: "scannerLineLoop")
+    }
+
+    private func animateScanSuccess() {
+        guard !didAnimateSuccess else { return }
+        didAnimateSuccess = true
+        scanFrameView.layer.removeAllAnimations()
+        scanLineView.layer.removeAllAnimations()
+
+        if UIView.shouldReduceMotion {
+            UIView.animate(withDuration: 0.15) {
+                self.scanFrameView.alpha = 0
+            }
+            return
+        }
+
+        UIView.animate(withDuration: 0.2, animations: {
+            self.scanFrameView.transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
+            self.scanFrameView.layer.borderColor = UIColor.systemYellow.cgColor
+        }) { _ in
+            UIView.animate(withDuration: 0.2) {
+                self.scanFrameView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
+                self.scanFrameView.alpha = 0
+            }
+        }
     }
 }

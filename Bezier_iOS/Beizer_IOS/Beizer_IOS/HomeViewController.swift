@@ -8,16 +8,24 @@
 import UIKit
 
 class HomeViewController: UIViewController {
+    private var hasAnimatedEntrance = false
+    private var primaryButtons: [UIButton] {
+        view.subviews.compactMap { $0 as? UIButton }.sorted { $0.frame.minY < $1.frame.minY }
+    }
     
     
     
     @IBAction func joinSessionTapped(_ sender: UIButton) {
-        performSegue(withIdentifier: "goToScanner", sender: self)
+        sender.animatePlayfulTap { [weak self] in
+            self?.performSegue(withIdentifier: "goToScanner", sender: self)
+        }
     }
     
     
     @IBAction func hostSessionTapped(_ sender: UIButton) {
-        performSegue(withIdentifier: "goToHost", sender: self)
+        sender.animatePlayfulTap { [weak self] in
+            self?.performSegue(withIdentifier: "goToHost", sender: self)
+        }
     }
     
     
@@ -27,6 +35,16 @@ class HomeViewController: UIViewController {
         super.viewDidLoad()
 
         // Do any additional setup after loading the view.
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !hasAnimatedEntrance else { return }
+        hasAnimatedEntrance = true
+
+        for (index, button) in primaryButtons.enumerated() {
+            button.animateEntrance(delay: TimeInterval(index) * 0.12, from: 0, translationY: 24)
+        }
     }
     
 

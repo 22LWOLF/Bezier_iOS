@@ -10,6 +10,59 @@ import AVFoundation
 import FirebaseCore
 import FirebaseAuth
       
+extension UIView {
+    static var shouldReduceMotion: Bool {
+        UIAccessibility.isReduceMotionEnabled
+    }
+
+    func animatePlayfulTap(completion: (() -> Void)? = nil) {
+        guard !UIView.shouldReduceMotion else {
+            completion?()
+            return
+        }
+
+        UIView.animate(withDuration: 0.09, delay: 0, options: [.curveEaseOut], animations: {
+            self.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+        }) { _ in
+            UIView.animate(withDuration: 0.24, delay: 0, usingSpringWithDamping: 0.45, initialSpringVelocity: 4.0, options: [.curveEaseInOut], animations: {
+                self.transform = .identity
+            }) { _ in
+                completion?()
+            }
+        }
+    }
+
+    func animateEntrance(delay: TimeInterval = 0, from translationX: CGFloat = -36, translationY: CGFloat = 0) {
+        if UIView.shouldReduceMotion {
+            alpha = 0
+            transform = .identity
+            UIView.animate(withDuration: 0.18, delay: delay, options: [.curveEaseOut], animations: {
+                self.alpha = 1
+            })
+            return
+        }
+
+        alpha = 0
+        transform = CGAffineTransform(translationX: translationX, y: translationY)
+        UIView.animate(withDuration: 0.62, delay: delay, usingSpringWithDamping: 0.74, initialSpringVelocity: 0.45, options: [.curveEaseOut], animations: {
+            self.alpha = 1
+            self.transform = .identity
+        })
+    }
+
+    func animateSoftPulse() {
+        guard !UIView.shouldReduceMotion else { return }
+        transform = .identity
+        UIView.animate(withDuration: 0.2, animations: {
+            self.transform = CGAffineTransform(scaleX: 1.06, y: 1.06)
+        }) { _ in
+            UIView.animate(withDuration: 0.2) {
+                self.transform = .identity
+            }
+        }
+    }
+}
+
 
 class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavigationControllerDelegate {
     
@@ -34,27 +87,13 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         // Style the text fields
                 styleTextField(emailTextField)
                 styleTextField(passwordTextField)
-                
-                // Start with elements off-screen and transparent
-                emailTextField.alpha = 0
-                passwordTextField.alpha = 0
-                emailTextField.transform = CGAffineTransform(translationX: -300, y: 0)
-                passwordTextField.transform = CGAffineTransform(translationX: -300, y: 0)
     }
     
     override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             
-            // Animate elements sliding in
-        UIView.animate(withDuration: 0.8, delay: 0.1, usingSpringWithDamping: 1.0, initialSpringVelocity: 0.2, options: .transitionFlipFromTop) {
-                self.emailTextField.alpha = 1
-                self.emailTextField.transform = .identity
-            }
-            
-        UIView.animate(withDuration: 0.8, delay: 0.3, usingSpringWithDamping: 1.0, initialSpringVelocity: 0.2, options: .curveEaseOut) {
-                self.passwordTextField.alpha = 1
-                self.passwordTextField.transform = .identity
-            }
+            emailTextField.animateEntrance(delay: 0.08, from: -52)
+            passwordTextField.animateEntrance(delay: 0.2, from: -52)
         }
 
     
@@ -86,14 +125,7 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         
         
 
-        // Scale button on tap
-        UIView.animate(withDuration: 0.1, animations: {
-            sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
-        }) { _ in
-            UIView.animate(withDuration: 0.1) {
-                sender.transform = .identity
-            }
-        }
+        sender.animatePlayfulTap()
         
         // Use FirebaseManager to login
                 sender.isEnabled = false
@@ -108,6 +140,7 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
                         switch result {
                         case .success(let userID):
                             print("Logged in successfully! User ID: \(userID)")
+                            self.view.animateSoftPulse()
                             self.performSegue(withIdentifier: "goToHome", sender: self)
                             
                         case .failure(let error):
@@ -120,6 +153,7 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
             }
 
     @IBAction func registerButtonTapped(_ sender: UIButton) {
+        sender.animatePlayfulTap()
         let email = emailTextField.text ?? ""
            let password = passwordTextField.text ?? ""
            
