@@ -41,14 +41,14 @@ class FirebaseManager {
     // MARK: - Kick and Ban Management
 
     func kickParticipant(sessionId: String, participantId: String, completion: @escaping (Result<Bool, Error>) -> Void) {
-        print("🚫 Kicking participant: \(participantId) from session: \(sessionId)")
+        print("Kicking participant: \(participantId) from session: \(sessionId)")
         
         // Remove from participants subcollection
         db.collection("attendance_sessions").document(sessionId)
             .collection("participants").document(participantId).delete { error in
                 
                 if let error = error {
-                    print("❌ Failed to kick participant: \(error.localizedDescription)")
+                    print("Failed to kick participant: \(error.localizedDescription)")
                     completion(.failure(error))
                     return
                 }
@@ -59,17 +59,17 @@ class FirebaseManager {
                         "attendeeCount": FieldValue.increment(Int64(-1))
                     ]) { error in
                         if let error = error {
-                            print("⚠️ Failed to decrement count: \(error)")
+                            print("Failed to decrement count: \(error)")
                         }
                         
-                        print("✅ Participant kicked successfully")
+                        print("Participant kicked successfully")
                         completion(.success(true))
                     }
             }
     }
 
     func banParticipant(sessionId: String, participantId: String, participantEmail: String, completion: @escaping (Result<Bool, Error>) -> Void) {
-        print("🚫 Banning participant: \(participantId) from session: \(sessionId)")
+        print("Banning participant: \(participantId) from session: \(sessionId)")
         
         // Add to banned list
         let banData: [String: Any] = [
@@ -83,7 +83,7 @@ class FirebaseManager {
             .collection("banned").document(participantId).setData(banData) { error in
                 
                 if let error = error {
-                    print("❌ Failed to ban participant: \(error.localizedDescription)")
+                    print("Failed to ban participant: \(error.localizedDescription)")
                     completion(.failure(error))
                     return
                 }
@@ -92,10 +92,10 @@ class FirebaseManager {
                 self.kickParticipant(sessionId: sessionId, participantId: participantId) { result in
                     switch result {
                     case .success:
-                        print("✅ Participant banned and kicked")
+                        print("Participant banned and kicked")
                         completion(.success(true))
                     case .failure(let error):
-                        print("⚠️ Banned but failed to kick: \(error)")
+                        print("Banned but failed to kick: \(error)")
                         completion(.success(true)) // Still consider it success since they're banned
                     }
                 }
@@ -107,14 +107,14 @@ class FirebaseManager {
             .collection("banned").document(participantId).getDocument { snapshot, error in
                 
                 if let error = error {
-                    print("⚠️ Error checking ban status: \(error.localizedDescription)")
+                    print("Error checking ban status: \(error.localizedDescription)")
                     completion(false)
                     return
                 }
                 
                 let isBanned = snapshot?.exists ?? false
                 if isBanned {
-                    print("🚫 User is banned from this session")
+                    print("User is banned from this session")
                 }
                 completion(isBanned)
             }
@@ -148,7 +148,7 @@ class FirebaseManager {
                 if let error = error {
                     completion(.failure(error))
                 } else {
-                    print("✅ User document created with name: \(firstName) \(lastName)")
+                    print("User document created with name: \(firstName) \(lastName)")
                     completion(.success(userID))
                 }
             }
@@ -187,7 +187,7 @@ class FirebaseManager {
         
         profilePhotoRef.putData(imageData, metadata: metadata) { metadata, error in
             if let error = error {
-                print("❌ Upload failed: \(error.localizedDescription)")
+                print("Upload failed: \(error.localizedDescription)")
                 completion(.failure(error))
                 return
             }
@@ -195,7 +195,7 @@ class FirebaseManager {
             // Get download URL
             profilePhotoRef.downloadURL { url, error in
                 if let error = error {
-                    print("❌ Failed to get download URL: \(error.localizedDescription)")
+                    print("Failed to get download URL: \(error.localizedDescription)")
                     completion(.failure(error))
                     return
                 }
@@ -210,10 +210,10 @@ class FirebaseManager {
                     "profilePhotoURL": downloadURL
                 ]) { error in
                     if let error = error {
-                        print("❌ Failed to update user document: \(error.localizedDescription)")
+                        print("Failed to update user document: \(error.localizedDescription)")
                         completion(.failure(error))
                     } else {
-                        print("✅ Profile photo uploaded and URL saved: \(downloadURL)")
+                        print("Profile photo uploaded and URL saved: \(downloadURL)")
                         completion(.success(downloadURL))
                     }
                 }
@@ -302,19 +302,19 @@ class FirebaseManager {
     
     func joinSession(sessionID: String, completion: @escaping (Result<String, Error>) -> Void) {
         guard let userID = getCurrentUserID() else {
-            print("❌ No user ID - user not logged in")
+            print("No user ID - user not logged in")
             completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])))
             return
         }
         
-        print("🔍 Attempting to join session: \(sessionID)")
-        print("🔍 Current user ID: \(userID)")
+        print("Attempting to join session: \(sessionID)")
+        print("Current user ID: \(userID)")
         
         // First, get user info
         getUserInfo { userResult in
             switch userResult {
             case .success(let userData):
-                print("✅ Got user data from Firestore:")
+                print("Got user data from Firestore:")
                 print("   Raw data: \(userData)")
                 
                 // Extract fields with detailed logging
@@ -327,7 +327,7 @@ class FirebaseManager {
                 // Get the session document directly using sessionID
                 self.db.collection("attendance_sessions").document(sessionID).getDocument { snapshot, error in
                     if let error = error {
-                        print("❌ Error getting session: \(error.localizedDescription)")
+                        print("Error getting session: \(error.localizedDescription)")
                         completion(.failure(error))
                         return
                     }
@@ -335,16 +335,16 @@ class FirebaseManager {
                     guard let sessionData = snapshot?.data(),
                           let isActive = sessionData["active"] as? Bool,
                           isActive else {
-                        print("❌ Session not found or inactive")
+                        print("Session not found or inactive")
                         completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "Session not found or inactive"])))
                         return
                     }
                     
-                    print("✅ Session found and active")
+                    print("Session found and active")
                     
                     self.checkIfBanned(sessionId: sessionID, participantId: userID) { isBanned in
                         if isBanned {
-                            print("🚫 User is banned from this session")
+                            print("User is banned from this session")
                             completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "You have been banned from this session"])))
                             return
                         }
@@ -353,7 +353,7 @@ class FirebaseManager {
                         self.db.collection("attendance_sessions").document(sessionID)
                             .collection("participants").document(userID).getDocument { participantDoc, error in
                                 if participantDoc?.exists == true {
-                                    print("⚠️ User already checked in")
+                                    print("User already checked in")
                                     completion(.failure(NSError(domain: "Session", code: -1, userInfo: [NSLocalizedDescriptionKey: "Already checked in to this session"])))
                                     return
                                 }
@@ -372,18 +372,18 @@ class FirebaseManager {
                                     "sessionId": sessionID
                                 ]
                                 
-                                print("📝 Participant data to be written:")
+                                print("Participant data to be written:")
                                 print("   \(participantData)")
                                 
                                 self.db.collection("attendance_sessions").document(sessionID)
                                     .collection("participants").document(userID).setData(participantData) { error in
                                         if let error = error {
-                                            print("❌ Failed to add participant: \(error.localizedDescription)")
+                                            print("Failed to add participant: \(error.localizedDescription)")
                                             completion(.failure(error))
                                             return
                                         }
                                         
-                                        print("✅ Participant document written successfully!")
+                                        print("Participant document written successfully!")
                                         
                                         // Increment attendee count
                                         self.db.collection("attendance_sessions").document(sessionID)
@@ -391,12 +391,12 @@ class FirebaseManager {
                                                 "attendeeCount": FieldValue.increment(Int64(1))
                                             ]) { error in
                                                 if let error = error {
-                                                    print("⚠️ Failed to increment count: \(error)")
+                                                    print("Failed to increment count: \(error)")
                                                 } else {
-                                                    print("✅ Attendee count incremented")
+                                                    print("Attendee count incremented")
                                                 }
                                                 
-                                                print("✅ Successfully joined session!")
+                                                print("Successfully joined session!")
                                                 completion(.success(sessionID))
                                             }
                                     }
@@ -405,7 +405,7 @@ class FirebaseManager {
                 }
                 
             case .failure(let error):
-                print("❌ Failed to get user info: \(error.localizedDescription)")
+                print("Failed to get user info: \(error.localizedDescription)")
                 completion(.failure(error))
             }
         }
@@ -413,25 +413,25 @@ class FirebaseManager {
   
     func listenToSession(sessionId: String, onUpdate: @escaping ([ParticipantInfo]) -> Void) -> ListenerRegistration {
         
-        print("👂 Starting to listen to session: \(sessionId)")
+        print("Starting to listen to session: \(sessionId)")
         
         return db.collection("attendance_sessions").document(sessionId)
             .collection("participants")
             .addSnapshotListener { snapshot, error in
                 
                 if let error = error {
-                    print("❌ Listener error: \(error.localizedDescription)")
+                    print("Listener error: \(error.localizedDescription)")
                     onUpdate([])
                     return
                 }
                 
                 guard let documents = snapshot?.documents else {
-                    print("📭 No participants yet")
+                    print("No participants yet")
                     onUpdate([])
                     return
                 }
                 
-                print("📢 Participants updated: \(documents.count) total")
+                print("Participants updated: \(documents.count) total")
                     
                 let participants = documents.compactMap { doc -> ParticipantInfo? in
                     let data = doc.data()
@@ -451,17 +451,17 @@ class FirebaseManager {
     }
     
     func endSession(sessionId: String, completion: @escaping (Result<Bool, Error>) -> Void) {
-        print("🛑 Ending session: \(sessionId)")
+        print("Ending session: \(sessionId)")
         
         db.collection("attendance_sessions").document(sessionId).updateData([
             "active": false,
             "endedAt": Int(Date().timeIntervalSince1970 * 1000)
         ]) { error in
             if let error = error {
-                print("❌ Failed to end session: \(error.localizedDescription)")
+                print("Failed to end session: \(error.localizedDescription)")
                 completion(.failure(error))
             } else {
-                print("✅ Session ended successfully")
+                print("Session ended successfully")
                 completion(.success(true))
             }
         }

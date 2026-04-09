@@ -34,9 +34,9 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         
         // Debug: Check if user is logged in
         if let userID = FirebaseManager.shared.getCurrentUserID() {
-            print("✅ Current user ID: \(userID)")
+            print("Current user ID: \(userID)")
         } else {
-            print("❌ No user logged in!")
+            print("No user logged in!")
             showAlert(message: "Please log in first")
             return
         }
@@ -46,16 +46,16 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
             case .success(let sessionId):
                 self.sessionId = sessionId
 
-                print("✅ Session created!")
+                print("Session created!")
                 print("   sessionId: \(sessionId)")
                 
                 // Create QR code payload with JSON
                 if let jsonString = self.makeQRPayloadJSON(sessionId: sessionId, sessionName: sessionName),
                    let qrImage = self.generateQRCode(from: jsonString) {
-                    print("📦 QR payload: \(jsonString)")
+                    print("QR payload: \(jsonString)")
                     self.qrCodeImageView.image = qrImage
                 } else {
-                    print("⚠️ Failed to build QR JSON payload, falling back to raw sessionId")
+                    print("Failed to build QR JSON payload, falling back to raw sessionId")
                     self.qrCodeImageView.image = self.generateQRCode(from: sessionId)
                 }
                 
@@ -63,7 +63,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                 self.startListening()
                 
             case .failure(let error):
-                print("❌ Failed to create session: \(error)")
+                print("Failed to create session: \(error)")
                 self.showAlert(message: "Failed to create session: \(error.localizedDescription)")
             }
         }
@@ -85,7 +85,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     
     func startListening() {
         listener = FirebaseManager.shared.listenToSession(sessionId: sessionId) { participants in
-            print("📢 Participants updated: \(participants.count) total")
+            print("Participants updated: \(participants.count) total")
             
             // Debug: Print each participant
             for participant in participants {
@@ -200,7 +200,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                 DispatchQueue.main.async {
                     switch result {
                     case .success:
-                        print("✅ Participant kicked")
+                        print("Participant kicked")
                     case .failure(let error):
                         self.showAlert(message: "Failed to kick: \(error.localizedDescription)")
                     }
@@ -229,7 +229,7 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                 DispatchQueue.main.async {
                     switch result {
                     case .success:
-                        print("✅ Participant banned")
+                        print("Participant banned")
                     case .failure(let error):
                         self.showAlert(message: "Failed to ban: \(error.localizedDescription)")
                     }
@@ -262,12 +262,12 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         FirebaseManager.shared.endSession(sessionId: sessionId) { result in
             switch result {
             case .success:
-                print("✅ Session ended")
+                print("Session ended")
                 self.listener?.remove()
                 self.navigationController?.popViewController(animated: true)
                 
             case .failure(let error):
-                print("❌ Failed to end session: \(error)")
+                print("Failed to end session: \(error)")
                 self.showAlert(message: "Failed to end session")
             }
         }

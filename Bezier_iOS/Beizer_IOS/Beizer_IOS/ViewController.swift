@@ -107,11 +107,11 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
                         
                         switch result {
                         case .success(let userID):
-                            print("✅ Logged in successfully! User ID: \(userID)")
+                            print("Logged in successfully! User ID: \(userID)")
                             self.performSegue(withIdentifier: "goToHome", sender: self)
                             
                         case .failure(let error):
-                            print("❌ Login failed: \(error.localizedDescription)")
+                            print("Login failed: \(error.localizedDescription)")
                             self.presentAuthAlert(title: "Login Failed", message: error.localizedDescription)
                             self.shakeView(sender)
                         }
@@ -172,7 +172,7 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
                DispatchQueue.main.async {
                    switch result {
                    case .success(let userID):
-                       print("✅ Registered successfully! User ID: \(userID)")
+                       print("Registered successfully! User ID: \(userID)")
                        self.presentAuthAlert(title: "Success", message: "Account created! Now add a profile photo.")
                        
                        // Show photo picker after registration
@@ -181,7 +181,7 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
                        }
                        
                    case .failure(let error):
-                       print("❌ Registration failed: \(error.localizedDescription)")
+                       print("Registration failed: \(error.localizedDescription)")
                        self.presentAuthAlert(title: "Registration Failed", message: error.localizedDescription)
                    }
                }

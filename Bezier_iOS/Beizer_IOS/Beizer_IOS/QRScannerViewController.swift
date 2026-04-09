@@ -127,9 +127,9 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         FirebaseManager.shared.joinSession(sessionID: sessionId) { result in
             switch result {
             case .success(let sessionId):
-                print("✅ Joined session: \(sessionId)")
+                print("Joined session: \(sessionId)")
                 let alert = UIAlertController(
-                    title: "✅ Attendance Marked!",
+                    title: "Attendance Marked!",
                     message: "You've successfully checked in.",
                     preferredStyle: .alert
                 )
@@ -140,7 +140,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
             case .failure(let error):
                 print("Check-in failed: \(error.localizedDescription)")
                 let alert = UIAlertController(
-                    title: "❌ Check-in Failed",
+                    title: "Check-in Failed",
                     message: error.localizedDescription,
                     preferredStyle: .alert
                 )
