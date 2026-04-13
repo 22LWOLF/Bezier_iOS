@@ -19,7 +19,175 @@ class FirebaseManager {
     let db = Firestore.firestore()
     
     private init() {}
-    
+
+    /// Firestore `users` documents are keyed by normalized email (not Auth UID).
+    private func normalizedEmailForUserDocument(_ email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func currentUserFirestoreDocumentId() -> String? {
+        guard let email = auth.currentUser?.email else { return nil }
+        return normalizedEmailForUserDocument(email)
+    }
+
+    /// Firestore field for profile image URL (`profilePictureURL` is still read for older documents).
+    private static let userPhotoURLKey = "photoURL"
+    private static let legacyUserPhotoURLKey = "profilePictureURL"
+
+    /// Legacy accounts store `users/{uid}`; newer accounts use `users/{normalizedEmail}`.
+    private func photoURLString(from snapshot: DocumentSnapshot?) -> String? {
+        guard let data = snapshot?.data() else { return nil }
+        if let url = data[Self.userPhotoURLKey] as? String {
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        if let url = data[Self.legacyUserPhotoURLKey] as? String {
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return nil
+    }
+
+    private func normalizePhotoURLField(in merged: inout [String: Any]) {
+        let photo = (merged[Self.userPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let legacy = (merged[Self.legacyUserPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if photo.isEmpty && !legacy.isEmpty {
+            merged[Self.userPhotoURLKey] = legacy
+        }
+    }
+
+    /// Older user docs may still use `participantemail` / `participantDisplayName` / `firstName`+`lastName`.
+    private func resolvedEmailFromUserData(_ userData: [String: Any]) -> String? {
+        if let e = userData["email"] as? String, !e.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return e
+        }
+        if let e = userData["participantemail"] as? String, !e.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return e
+        }
+        return nil
+    }
+
+    private func resolvedDisplayNameFromUserData(_ userData: [String: Any]) -> String? {
+        if let s = userData["displayName"] as? String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { return t }
+        }
+        if let s = userData["participantDisplayName"] as? String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !t.isEmpty { return t }
+        }
+        let first = userData["firstName"] as? String ?? ""
+        let last = userData["lastName"] as? String ?? ""
+        let combined = "\(first) \(last)".trimmingCharacters(in: .whitespacesAndNewlines)
+        return combined.isEmpty ? nil : combined
+    }
+
+    /// Loads current-user Firestore data, merging email-keyed and UID-keyed docs so legacy profiles still resolve.
+    private func fetchMergedCurrentUserFirestoreData(completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard let uid = getCurrentUserID() else {
+            completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])))
+            return
+        }
+
+        let emailRef = currentUserFirestoreDocumentId().map { db.collection("users").document($0) }
+        let uidRef = db.collection("users").document(uid)
+
+        func loadEmailThenUid(completion: @escaping ([String: Any]?, [String: Any]?) -> Void) {
+            guard let emailRef = emailRef else {
+                uidRef.getDocument { snap, _ in
+                    let u = (snap?.exists == true) ? snap?.data() : nil
+                    completion(nil, u)
+                }
+                return
+            }
+            emailRef.getDocument { emailSnap, _ in
+                let emailData = (emailSnap?.exists == true) ? emailSnap?.data() : nil
+                uidRef.getDocument { uidSnap, _ in
+                    let uidData = (uidSnap?.exists == true) ? uidSnap?.data() : nil
+                    completion(emailData, uidData)
+                }
+            }
+        }
+
+        loadEmailThenUid { emailData, uidData in
+            guard emailData != nil || uidData != nil else {
+                completion(.failure(NSError(domain: "Firestore", code: -1, userInfo: [NSLocalizedDescriptionKey: "User data not found"])))
+                return
+            }
+            var merged = emailData ?? [:]
+            if merged.isEmpty, let u = uidData {
+                merged = u
+                self.normalizePhotoURLField(in: &merged)
+                self.normalizeUidField(in: &merged)
+                completion(.success(merged))
+                return
+            }
+            if let u = uidData {
+                for (key, value) in u {
+                    if key == Self.userPhotoURLKey || key == Self.legacyUserPhotoURLKey {
+                        let mergedPhoto = (merged[Self.userPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        let mergedLegacy = (merged[Self.legacyUserPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        if mergedPhoto.isEmpty && mergedLegacy.isEmpty {
+                            merged[Self.userPhotoURLKey] = value
+                        }
+                    } else if merged[key] == nil {
+                        merged[key] = value
+                    }
+                }
+            }
+            self.normalizePhotoURLField(in: &merged)
+            self.normalizeUidField(in: &merged)
+            completion(.success(merged))
+        }
+    }
+
+    private func normalizeUidField(in merged: inout [String: Any]) {
+        if merged["uid"] == nil, let legacy = merged["participantId"] as? String, !legacy.isEmpty {
+            merged["uid"] = legacy
+        }
+    }
+
+    /// Updates fields on `users/{normalizedEmail}` when present, otherwise legacy `users/{uid}`.
+    private func updateFieldsOnCurrentUserDocument(_ fields: [String: Any], completion: @escaping (Error?) -> Void) {
+        guard let uid = getCurrentUserID() else {
+            completion(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"]))
+            return
+        }
+        let uidRef = db.collection("users").document(uid)
+
+        guard let emailId = currentUserFirestoreDocumentId() else {
+            uidRef.updateData(fields, completion: completion)
+            return
+        }
+        let emailRef = db.collection("users").document(emailId)
+        emailRef.getDocument { snap, _ in
+            if snap?.exists == true {
+                emailRef.updateData(fields, completion: completion)
+            } else {
+                uidRef.getDocument { uidSnap, _ in
+                    if uidSnap?.exists == true {
+                        uidRef.updateData(fields, completion: completion)
+                    } else {
+                        emailRef.setData(fields, merge: true, completion: completion)
+                    }
+                }
+            }
+        }
+    }
+
+    private func touchLastLoginForCurrentUser(completion: ((Error?) -> Void)? = nil) {
+        updateFieldsOnCurrentUserDocument(["lastLoginAt": Timestamp(date: Date())]) { error in
+            if let error = error {
+                print("lastLoginAt update failed: \(error.localizedDescription)")
+            }
+            completion?(error)
+        }
+    }
+
+    private func updateProfilePictureURLForCurrentUser(_ downloadURL: String, completion: @escaping (Error?) -> Void) {
+        updateFieldsOnCurrentUserDocument([Self.userPhotoURLKey: downloadURL], completion: completion)
+    }
+
     // MARK: - Authentication
     
     func login(email: String, password: String, completion: @escaping (Result<String, Error>) -> Void) {
@@ -33,8 +201,10 @@ class FirebaseManager {
                 completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "No user ID found"])))
                 return
             }
-            
-            completion(.success(userID))
+
+            self.touchLastLoginForCurrentUser { _ in
+                completion(.success(userID))
+            }
         }
     }
     
@@ -131,24 +301,25 @@ class FirebaseManager {
                 return
             }
             
-            // Create user document in Firestore with actual names
+            let emailDocId = self.normalizedEmailForUserDocument(email)
+            let now = Timestamp(date: Date())
+            let displayName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // `users/{normalizedEmail}` — schema matches Firestore console: timestamps, displayName, email, photoURL, uid.
             let userData: [String: Any] = [
+                "createdAt": now,
+                "displayName": displayName,
                 "email": email,
-                "participantemail": email,
-                "displayName": "\(firstName) \(lastName)",
-                "participantDisplayName": "\(firstName) \(lastName)",
-                "firstName": firstName,
-                "lastName": lastName,
-                "createdAt": Int(Date().timeIntervalSince1970 * 1000),
-                "participantId": userID,
-                "profilePhotoURL": "" // Empty initially, will be updated when photo is uploaded
+                "lastLoginAt": now,
+                Self.userPhotoURLKey: "",
+                "uid": userID
             ]
-            
-            self.db.collection("users").document(userID).setData(userData) { error in
+
+            self.db.collection("users").document(emailDocId).setData(userData) { error in
                 if let error = error {
                     completion(.failure(error))
                 } else {
-                    print("User document created with name: \(firstName) \(lastName)")
+                    print("User document created for \(emailDocId)")
                     completion(.success(userID))
                 }
             }
@@ -165,7 +336,7 @@ class FirebaseManager {
     
     // MARK: - Profile Photo Management
 
-    func uploadProfilePhoto(image: UIImage, completion: @escaping (Result<String, Error>) -> Void) {
+    func uploadProfilePicture(image: UIImage, originalFileName: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
         guard let userID = getCurrentUserID() else {
             completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])))
             return
@@ -177,15 +348,21 @@ class FirebaseManager {
             return
         }
         
+        // Create storage path:
+        // profile_pictures/{uid}/{timestamp}_{filename}
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let safeName = sanitizeFileName(originalFileName ?? "profile.jpg")
+        let objectName = "\(timestamp)_\(safeName)"
+
         // Create storage reference
         let storageRef = Storage.storage().reference()
-        let profilePhotoRef = storageRef.child("profile_photos/\(userID).jpg")
+        let profilePictureRef = storageRef.child("profile_pictures/\(userID)/\(objectName)")
         
         // Upload
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
         
-        profilePhotoRef.putData(imageData, metadata: metadata) { metadata, error in
+        profilePictureRef.putData(imageData, metadata: metadata) { metadata, error in
             if let error = error {
                 print("Upload failed: \(error.localizedDescription)")
                 completion(.failure(error))
@@ -193,7 +370,7 @@ class FirebaseManager {
             }
             
             // Get download URL
-            profilePhotoRef.downloadURL { url, error in
+            profilePictureRef.downloadURL { url, error in
                 if let error = error {
                     print("Failed to get download URL: \(error.localizedDescription)")
                     completion(.failure(error))
@@ -205,10 +382,7 @@ class FirebaseManager {
                     return
                 }
                 
-                // Update user document with photo URL
-                self.db.collection("users").document(userID).updateData([
-                    "profilePhotoURL": downloadURL
-                ]) { error in
+                self.updateProfilePictureURLForCurrentUser(downloadURL) { error in
                     if let error = error {
                         print("Failed to update user document: \(error.localizedDescription)")
                         completion(.failure(error))
@@ -221,7 +395,16 @@ class FirebaseManager {
         }
     }
 
-    func downloadProfilePhoto(url: String, completion: @escaping (Result<UIImage, Error>) -> Void) {
+    private func sanitizeFileName(_ fileName: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        let filtered = fileName.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? Character(scalar) : "_"
+        }
+        let result = String(filtered)
+        return result.isEmpty ? "profile.jpg" : result
+    }
+
+    func downloadProfilePicture(url: String, completion: @escaping (Result<UIImage, Error>) -> Void) {
         guard let imageURL = URL(string: url) else {
             completion(.failure(NSError(domain: "URL", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"])))
             return
@@ -241,28 +424,86 @@ class FirebaseManager {
             completion(.success(image))
         }.resume()
     }
+
+    func getProfilePictureURL(for userID: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
+        func finish(from snapshot: DocumentSnapshot?) {
+            if let url = photoURLString(from: snapshot) {
+                completion(.success(url))
+                return
+            }
+            completion(.failure(NSError(domain: "Firestore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Profile photo URL not found"])))
+        }
+
+        if let uid = userID {
+            db.collection("users").whereField("uid", isEqualTo: uid).limit(to: 1).getDocuments { snapshot, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                if let doc = snapshot?.documents.first {
+                    finish(from: doc)
+                    return
+                }
+                self.db.collection("users").whereField("participantId", isEqualTo: uid).limit(to: 1).getDocuments { snapshot2, error2 in
+                    if let error2 = error2 {
+                        completion(.failure(error2))
+                        return
+                    }
+                    if let doc = snapshot2?.documents.first {
+                        finish(from: doc)
+                        return
+                    }
+                    self.db.collection("users").document(uid).getDocument { snap, err in
+                        if let err = err {
+                            completion(.failure(err))
+                            return
+                        }
+                        finish(from: snap)
+                    }
+                }
+            }
+            return
+        }
+
+        fetchMergedCurrentUserFirestoreData { result in
+            switch result {
+            case .success(let data):
+                if let raw = data[Self.userPhotoURLKey] as? String {
+                    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        completion(.success(trimmed))
+                        return
+                    }
+                }
+                if let raw = data[Self.legacyUserPhotoURLKey] as? String {
+                    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        completion(.success(trimmed))
+                        return
+                    }
+                }
+                completion(.failure(NSError(domain: "Firestore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Profile photo URL not found"])))
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    func downloadProfilePicture(for userID: String? = nil, completion: @escaping (Result<UIImage, Error>) -> Void) {
+        getProfilePictureURL(for: userID) { result in
+            switch result {
+            case .success(let url):
+                self.downloadProfilePicture(url: url, completion: completion)
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
     
     // MARK: - Get User Info
     
     func getUserInfo(completion: @escaping (Result<[String: Any], Error>) -> Void) {
-        guard let userID = getCurrentUserID() else {
-            completion(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "User not logged in"])))
-            return
-        }
-        
-        db.collection("users").document(userID).getDocument { snapshot, error in
-            if let error = error {
-                completion(.failure(error))
-                return
-            }
-            
-            guard let data = snapshot?.data() else {
-                completion(.failure(NSError(domain: "Firestore", code: -1, userInfo: [NSLocalizedDescriptionKey: "User data not found"])))
-                return
-            }
-            
-            completion(.success(data))
-        }
+        fetchMergedCurrentUserFirestoreData(completion: completion)
     }
     
     // MARK: - Session Management
@@ -291,10 +532,10 @@ class FirebaseManager {
         // Use sessionID as the document ID
         db.collection("attendance_sessions").document(sessionID).setData(sessionData) { error in
             if let error = error {
-                print("❌ Failed to create session: \(error.localizedDescription)")
+                print("Failed to create session: \(error.localizedDescription)")
                 completion(.failure(error))
             } else {
-                print("✅ Session created with sessionId: \(sessionID)")
+                print("Session created with sessionId: \(sessionID)")
                 completion(.success(sessionID))
             }
         }
@@ -317,12 +558,11 @@ class FirebaseManager {
                 print("Got user data from Firestore:")
                 print("   Raw data: \(userData)")
                 
-                // Extract fields with detailed logging
-                let email = userData["email"] as? String ?? userData["participantemail"] as? String
-                let displayName = userData["email"] as? String ?? userData["participantDisplayName"] as? String
-                
-                print("   participantemail: \(email ?? "NIL")")
-                print("   participantDisplayName: \(displayName ?? "NIL")")
+                let email = self.resolvedEmailFromUserData(userData) ?? self.getCurrentUserEmail()
+                let displayName = self.resolvedDisplayNameFromUserData(userData) ?? email ?? "Unknown"
+
+                print("   email: \(email ?? "NIL")")
+                print("   displayName: \(displayName)")
                 
                 // Get the session document directly using sessionID
                 self.db.collection("attendance_sessions").document(sessionID).getDocument { snapshot, error in
@@ -358,16 +598,16 @@ class FirebaseManager {
                                     return
                                 }
                                 
-                                // Use email as fallback for display name
                                 let finalEmail = email ?? "Unknown"
-                                let finalDisplayName = displayName ?? email ?? "Unknown"
+                                let finalDisplayName = displayName
                                 
                                 // Add user to participants subcollection
                                 let participantData: [String: Any] = [
                                     "participantId": userID,
                                     "participantEmail": finalEmail,
                                     "participantDisplayName": finalDisplayName,
-                                    "profilePhotoURL": userData["profilePhotoURL"] as? String ?? "",
+                                    Self.userPhotoURLKey: (userData[Self.userPhotoURLKey] as? String)
+                                        ?? (userData[Self.legacyUserPhotoURLKey] as? String) ?? "",
                                     "checkedInAt": Int(Date().timeIntervalSince1970 * 1000),
                                     "sessionId": sessionID
                                 ]
@@ -440,7 +680,6 @@ class FirebaseManager {
                             participantId: data["participantId"] as? String ?? "",
                             participantEmail: data["participantEmail"] as? String ?? "Unknown",
                             participantDisplayName: data["participantDisplayName"] as? String ?? "Unknown",
-                            profilePhotoURL: data["profilePhotoURL"] as? String ?? "",  // ← Add this
                             checkedInAt: data["checkedInAt"] as? Int ?? 0,
                             sessionId: data["sessionId"] as? String ?? ""
                         )

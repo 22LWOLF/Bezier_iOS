@@ -160,30 +160,15 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         cell.textLabel?.text = participant.participantDisplayName
         cell.detailTextLabel?.text = participant.participantEmail
         
-        // Load profile photo
-        if !participant.profilePhotoURL.isEmpty {
-            FirebaseManager.shared.downloadProfilePhoto(url: participant.profilePhotoURL) { result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .success(let image):
-                        // Make circular image
-                        let imageView = UIImageView(frame: CGRect(x: 0, y: 0, width: 40, height: 40))
-                        imageView.image = image
-                        imageView.contentMode = .scaleAspectFill
-                        imageView.layer.cornerRadius = 20
-                        imageView.clipsToBounds = true
-                        cell.imageView?.image = imageView.image
-                        cell.imageView?.layer.cornerRadius = 20
-                        cell.imageView?.clipsToBounds = true
-                        cell.setNeedsLayout()
-                        
-                    case .failure:
-                        cell.imageView?.image = UIImage(systemName: "person.circle.fill")
-                    }
-                }
-            }
-        } else {
-            cell.imageView?.image = UIImage(systemName: "person.circle.fill")
+        // Load profile photo (placeholder until model provides a URL)
+        cell.imageView?.image = UIImage(systemName: "person.circle.fill")
+        cell.imageView?.contentMode = .scaleAspectFill
+        cell.imageView?.clipsToBounds = true
+        // Make circular appearance if imageView has a frame
+        if let imageView = cell.imageView {
+            let side: CGFloat = 40
+            imageView.frame = CGRect(x: 0, y: 0, width: side, height: side)
+            imageView.layer.cornerRadius = side / 2
         }
         
         return cell
