@@ -145,12 +145,9 @@
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                         <constraints>
                             <constraint firstItem="ceN-6I-AoM" firstAttribute="trailing" secondItem="h6J-g3-y3D" secondAttribute="trailing" constant="30" id="9eZ-Sm-jWr"/>
-                            <constraint firstAttribute="bottomMargin" secondItem="h6J-g3-y3D" secondAttribute="bottom" constant="360" id="WKX-WK-NWe"/>
-                            <constraint firstItem="cLU-Hf-xdP" firstAttribute="top" secondItem="ceN-6I-AoM" secondAttribute="top" constant="217" id="hPw-5k-m38"/>
+                            <constraint firstItem="cLU-Hf-xdP" firstAttribute="top" secondItem="ceN-6I-AoM" secondAttribute="top" constant="217" id="ToO-Eg-9zF"/>
                             <constraint firstItem="h6J-g3-y3D" firstAttribute="leading" secondItem="cLU-Hf-xdP" secondAttribute="trailing" constant="53" id="iwF-0d-5vb"/>
                             <constraint firstItem="cLU-Hf-xdP" firstAttribute="leading" secondItem="ceN-6I-AoM" secondAttribute="leading" constant="30" id="pik-FO-Wlt"/>
-                            <constraint firstItem="ceN-6I-AoM" firstAttribute="bottom" secondItem="cLU-Hf-xdP" secondAttribute="bottom" constant="360" id="vUj-CH-LyE"/>
-                            <constraint firstItem="h6J-g3-y3D" firstAttribute="leading" secondItem="cLU-Hf-xdP" secondAttribute="trailing" constant="53" id="xeE-xU-5F0"/>
                             <constraint firstItem="h6J-g3-y3D" firstAttribute="top" secondItem="ceN-6I-AoM" secondAttribute="top" constant="217" id="zLQ-tc-6dE"/>
                         </constraints>
                     </view>

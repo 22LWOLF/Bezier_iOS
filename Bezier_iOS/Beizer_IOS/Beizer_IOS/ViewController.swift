@@ -214,7 +214,6 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         }
         sender.isEnabled = false
         let originalTitle = sender.title(for: .normal)
-        sender.setTitle("Logging in...", for: .normal)
         FirebaseManager.shared.login(email: email, password: password) { result in
             DispatchQueue.main.async {
                 sender.isEnabled = true
