@@ -58,8 +58,6 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         previewLayer.frame = view.layer.bounds
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
-        setupScannerOverlay()
-        
         // Start the session
         DispatchQueue.global(qos: .userInitiated).async {
             self.captureSession.startRunning()
@@ -169,26 +167,6 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
             self.navigationController?.popViewController(animated: true)
         })
         present(alert, animated: true)
-    }
-
-    private func setupScannerOverlay() {
-        let side = min(view.bounds.width * 0.7, 280)
-        scanFrameView.frame = CGRect(
-            x: (view.bounds.width - side) / 2,
-            y: (view.bounds.height - side) / 2,
-            width: side,
-            height: side
-        )
-        scanFrameView.layer.cornerRadius = 18
-        scanFrameView.layer.borderWidth = 3
-        scanFrameView.layer.borderColor = UIColor.label.cgColor
-        scanFrameView.backgroundColor = .clear
-        view.addSubview(scanFrameView)
-
-        scanLineView.frame = CGRect(x: 14, y: 10, width: side - 28, height: 4)
-        scanLineView.layer.cornerRadius = 2
-        scanLineView.backgroundColor = .label
-        scanFrameView.addSubview(scanLineView)
     }
 
     private func animateScanSuccess() {

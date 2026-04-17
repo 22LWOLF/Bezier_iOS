@@ -28,7 +28,9 @@ private extension UIColor {
     }
 }
 
-class HomeViewController: UIViewController {
+class HomeViewController: UIViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    @IBOutlet weak var logoImageView: UIImageView!
+    
     private var hasAnimatedEntrance = false
     private let profileContainer = UIStackView()
     private let profileImageView = UIImageView()
@@ -51,6 +53,31 @@ class HomeViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = AppColors.background
         setupAnimatedBackground()
+        // Ensure the 'logoImageView' outlet is connected in Interface Builder and has constraints or these defaults apply.
+        if let logoImageView = self.logoImageView {
+            // Ensure asset name matches exactly (without file extension)
+            if let img = UIImage(named: "BezierLogo") { // TODO: replace with your exact asset name
+                logoImageView.image = img
+            } else {
+                // Fallback: show a system placeholder if asset not found
+                logoImageView.image = UIImage(systemName: "photo")
+            }
+            logoImageView.contentMode = .scaleAspectFit
+            logoImageView.tintColor = nil
+            logoImageView.translatesAutoresizingMaskIntoConstraints = false
+            // Add default constraints if the image view is directly under self.view and has no constraints
+            if logoImageView.superview === self.view {
+                let hasConstraints = !(logoImageView.constraints.isEmpty) || !(logoImageView.superview?.constraints.filter { ($0.firstItem as? UIView) === logoImageView || ($0.secondItem as? UIView) === logoImageView }.isEmpty ?? true)
+                if !hasConstraints {
+                    NSLayoutConstraint.activate([
+                        logoImageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+                        logoImageView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
+                        logoImageView.widthAnchor.constraint(equalToConstant: 140),
+                        logoImageView.heightAnchor.constraint(equalToConstant: 56)
+                    ])
+                }
+            }
+        }
         configureProfileBadgeUI()
         refreshProfileBadge()
     }
@@ -58,6 +85,32 @@ class HomeViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         refreshProfileBadge()
+        applyFixedButtonTheme(in: view)
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        applyFixedButtonTheme(in: view)
+    }
+    
+    private func applyFixedButtonTheme(in root: UIView) {
+        if let button = root as? UIButton {
+            button.backgroundColor = AppColors.secondary
+            if var config = button.configuration {
+                config.baseBackgroundColor = AppColors.secondary
+                config.baseForegroundColor = .white
+                button.configuration = config
+            }
+            button.setTitleColor(.white, for: .normal)
+            button.setTitleColor(UIColor.white.withAlphaComponent(0.85), for: .highlighted)
+            button.setTitleColor(UIColor.white.withAlphaComponent(0.7), for: .disabled)
+            button.setTitleColor(.white, for: .selected)
+            button.tintColor = .white
+            button.layer.cornerRadius = 10
+        }
+        root.subviews.forEach { child in
+            applyFixedButtonTheme(in: child)
+        }
     }
     
     private func configureProfileBadgeUI() {
@@ -76,6 +129,10 @@ class HomeViewController: UIViewController {
         profileImageView.image = UIImage(systemName: "person.crop.circle.fill")
         profileImageView.tintColor = AppColors.foreground
         profileImageView.backgroundColor = .clear
+        
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleProfileImageTap))
+        profileImageView.isUserInteractionEnabled = true
+        profileImageView.addGestureRecognizer(tap)
 
         profileEmailLabel.translatesAutoresizingMaskIntoConstraints = false
         profileEmailLabel.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
@@ -204,5 +261,35 @@ class HomeViewController: UIViewController {
         // Pass the selected object to the new view controller.
     }
     */
+    
+    @objc private func handleProfileImageTap() {
+        let picker = UIImagePickerController()
+        picker.delegate = self
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        present(picker, animated: true)
+    }
 
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
+    }
+
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        let selectedImage = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage)
+        let selectedFileName = (info[.imageURL] as? URL)?.lastPathComponent
+        picker.dismiss(animated: true) {
+            guard let image = selectedImage else { return }
+            FirebaseManager.shared.replaceProfilePicture(image: image, originalFileName: selectedFileName) { result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success:
+                        self.refreshProfileBadge()
+                    case .failure(let error):
+                        print("Failed to replace profile photo: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+    }
 }
+

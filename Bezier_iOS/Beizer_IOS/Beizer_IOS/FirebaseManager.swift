@@ -386,6 +386,40 @@ class FirebaseManager {
         }
     }
 
+    /// Replace the existing profile picture by deleting the old storage object (if any) and uploading the new one.
+    func replaceProfilePicture(image: UIImage, originalFileName: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
+        // First attempt to get existing URL
+        getProfilePictureURL { result in
+            switch result {
+            case .success(let existingURL):
+                self.deleteStorageObjectIfOwnedByApp(urlString: existingURL) { _ in
+                    // Proceed to upload new regardless of delete result
+                    self.uploadProfilePicture(image: image, originalFileName: originalFileName, completion: completion)
+                }
+            case .failure:
+                // No existing URL; just upload new
+                self.uploadProfilePicture(image: image, originalFileName: originalFileName, completion: completion)
+            }
+        }
+    }
+
+    private func deleteStorageObjectIfOwnedByApp(urlString: String, completion: @escaping (Error?) -> Void) {
+        guard let url = URL(string: urlString) else { completion(nil); return }
+        // Expecting Firebase Storage download URL; extract path after "/o/" and decode
+        let absolute = url.absoluteString
+        guard let range = absolute.range(of: "/o/") else { completion(nil); return }
+        let afterO = absolute[range.upperBound...]
+        let pathEncoded = afterO.split(separator: "?").first.map(String.init) ?? ""
+        let path = pathEncoded.removingPercentEncoding ?? pathEncoded
+        let ref = Storage.storage().reference(withPath: path)
+        ref.delete { error in
+            if let error = error {
+                print("Delete old profile photo failed: \(error.localizedDescription)")
+            }
+            completion(error)
+        }
+    }
+
     private func sanitizeFileName(_ fileName: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
         let filtered = fileName.unicodeScalars.map { scalar in

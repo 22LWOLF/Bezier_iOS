@@ -38,6 +38,7 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
     
     @IBOutlet weak var emailTextField: UITextField!
     @IBOutlet weak var passwordTextField: UITextField!
+    @IBOutlet weak var logoImageView: UIImageView!
     
     private var bgGradientTop = CAGradientLayer()
     private var bgGradientBottom = CAGradientLayer()
@@ -49,11 +50,42 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         // Style the text fields for a neutral look
         styleTextField(emailTextField)
         styleTextField(passwordTextField)
+        
+        // Configure logo image if connected
+        if let logoImageView = self.logoImageView {
+            // Replace "BezierLogo" with your exact asset name (no file extension)
+            if let img = UIImage(named: "BezierLogo") {
+                logoImageView.image = img
+            } else {
+                logoImageView.image = UIImage(systemName: "photo")
+            }
+            logoImageView.contentMode = .scaleAspectFit
+            logoImageView.tintColor = nil
+            logoImageView.translatesAutoresizingMaskIntoConstraints = false
+            // If no constraints exist from storyboard and it's directly under self.view, add safe defaults centered above fields
+            if logoImageView.superview === self.view {
+                let hasConstraints = !(logoImageView.constraints.isEmpty) || !(logoImageView.superview?.constraints.filter { ($0.firstItem as? UIView) === logoImageView || ($0.secondItem as? UIView) === logoImageView }.isEmpty ?? true)
+                if !hasConstraints {
+                    NSLayoutConstraint.activate([
+                        logoImageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
+                        logoImageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                        logoImageView.widthAnchor.constraint(equalToConstant: 160),
+                        logoImageView.heightAnchor.constraint(equalToConstant: 72)
+                    ])
+                }
+            }
+        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         // Ensure buttons look standard system
+        applyFixedButtonTheme(in: view)
+        // Reapply button theme to avoid white title sticking
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
         applyFixedButtonTheme(in: view)
     }
     
@@ -329,13 +361,18 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
     
     private func applyFixedButtonTheme(in root: UIView) {
         if let button = root as? UIButton {
-            button.backgroundColor = AppColors.primary
+            button.backgroundColor = UIColor(hex: "#F92495")
             button.setTitleColor(.white, for: .normal)
             button.setTitleColor(UIColor.white.withAlphaComponent(0.85), for: .highlighted)
             button.setTitleColor(UIColor.white.withAlphaComponent(0.7), for: .disabled)
             button.setTitleColor(.white, for: .selected)
             button.tintColor = .white
             button.layer.cornerRadius = 10
+            if var config = button.configuration {
+                config.baseBackgroundColor = UIColor(hex: "#F92495")
+                config.baseForegroundColor = .white
+                button.configuration = config
+            }
         }
         root.subviews.forEach { child in
             applyFixedButtonTheme(in: child)

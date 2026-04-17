@@ -58,6 +58,33 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         
         // Create session in Firebase
         createSession()
+        
+        applyFixedButtonTheme(in: view)
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        applyFixedButtonTheme(in: view)
+    }
+    
+    private func applyFixedButtonTheme(in root: UIView) {
+        if let button = root as? UIButton {
+            button.backgroundColor = UIColor(hex: "#F92495")
+            button.setTitleColor(.white, for: .normal)
+            button.setTitleColor(UIColor.white.withAlphaComponent(0.85), for: .highlighted)
+            button.setTitleColor(UIColor.white.withAlphaComponent(0.7), for: .disabled)
+            button.setTitleColor(.white, for: .selected)
+            button.tintColor = .white
+            button.layer.cornerRadius = 10
+            if var config = button.configuration {
+                config.baseBackgroundColor = UIColor(hex: "#F92495")
+                config.baseForegroundColor = .white
+                button.configuration = config
+            }
+        }
+        root.subviews.forEach { child in
+            applyFixedButtonTheme(in: child)
+        }
     }
     
     private func setupAnimatedBackground() {
@@ -392,4 +419,3 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         listener?.remove()
     }
 }
-
