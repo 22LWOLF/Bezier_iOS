@@ -9,6 +9,26 @@ import UIKit
 import FirebaseFirestore
 import CoreImage
 
+private struct AppColors {
+    static let background = UIColor(hex: "#F2EDE6")
+    static let foreground = UIColor(hex: "#101118")
+    static let primary = UIColor(hex: "#213BDB")
+    static let secondary = UIColor(hex: "#F92495")
+    static let accent = UIColor(hex: "#ECA82F")
+}
+private extension UIColor {
+    convenience init(hex: String) {
+        var hexString = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if hexString.hasPrefix("#") { hexString.removeFirst() }
+        var rgb: UInt64 = 0
+        Scanner(string: hexString).scanHexInt64(&rgb)
+        let r = CGFloat((rgb & 0xFF0000) >> 16) / 255.0
+        let g = CGFloat((rgb & 0x00FF00) >> 8) / 255.0
+        let b = CGFloat(rgb & 0x0000FF) / 255.0
+        self.init(red: r, green: g, blue: b, alpha: 1)
+    }
+}
+
 class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
     
     @IBOutlet weak var qrCodeImageView: UIImageView!
@@ -20,8 +40,17 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     var listener: ListenerRegistration?
     private var previousParticipantCount: Int = 0
     
+    private var bgGradientTop = CAGradientLayer()
+    private var bgGradientBottom = CAGradientLayer()
+
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        view.backgroundColor = AppColors.background
+        setupAnimatedBackground()
+        
+        attendeeTableView.separatorColor = AppColors.foreground.withAlphaComponent(0.2)
+        attendeeCountLabel.textColor = AppColors.foreground
         
         attendeeTableView.delegate = self
         attendeeTableView.dataSource = self
@@ -29,6 +58,99 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         
         // Create session in Firebase
         createSession()
+    }
+    
+    private func setupAnimatedBackground() {
+        bgGradientTop.removeFromSuperlayer()
+        bgGradientBottom.removeFromSuperlayer()
+        bgGradientTop.frame = view.bounds
+        bgGradientBottom.frame = view.bounds
+        
+        bgGradientTop.colors = [AppColors.primary.withAlphaComponent(0.5).cgColor, AppColors.accent.withAlphaComponent(0.5).cgColor]
+        bgGradientTop.startPoint = CGPoint(x: 0.0, y: 1.0)
+        bgGradientTop.endPoint = CGPoint(x: 1.0, y: 0.0)
+        
+        bgGradientBottom.colors = [AppColors.secondary.withAlphaComponent(0.3).cgColor, AppColors.primary.withAlphaComponent(0.2).cgColor]
+        bgGradientBottom.startPoint = CGPoint(x: 0.0, y: 0.0)
+        bgGradientBottom.endPoint = CGPoint(x: 1.0, y: 1.0)
+        
+        let maskLayer = CAShapeLayer()
+        let path = UIBezierPath()
+        let w = view.bounds.width
+        let h = view.bounds.height
+        // Bezier ribbon along the very top for distinct orientation
+        path.move(to: CGPoint(x: 0, y: h * 0.08))
+        path.addCurve(to: CGPoint(x: w * 0.28, y: h * 0.02), controlPoint1: CGPoint(x: w * 0.10, y: h * 0.20), controlPoint2: CGPoint(x: w * 0.18, y: h * -0.06))
+        path.addCurve(to: CGPoint(x: w * 0.68, y: h * 0.10), controlPoint1: CGPoint(x: w * 0.42, y: h * 0.10), controlPoint2: CGPoint(x: w * 0.56, y: h * 0.22))
+        path.addCurve(to: CGPoint(x: w, y: h * 0.04), controlPoint1: CGPoint(x: w * 0.80, y: h * 0.00), controlPoint2: CGPoint(x: w * 0.92, y: h * -0.04))
+        path.addLine(to: CGPoint(x: w, y: h))
+        path.addLine(to: CGPoint(x: 0, y: h))
+        path.close()
+        maskLayer.path = path.cgPath
+        bgGradientBottom.mask = maskLayer
+        
+        view.layer.insertSublayer(bgGradientTop, at: 0)
+        view.layer.insertSublayer(bgGradientBottom, above: bgGradientTop)
+        
+        animateBackgroundGradients()
+    }
+    
+    private func animateBackgroundGradients() {
+        let topStart = CABasicAnimation(keyPath: "startPoint")
+        topStart.fromValue = CGPoint(x: 0.0, y: 1.0)
+        topStart.toValue = CGPoint(x: 0.1, y: 0.8)
+        topStart.duration = 6.0
+        topStart.autoreverses = true
+        topStart.repeatCount = .infinity
+        topStart.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        
+        let topEnd = CABasicAnimation(keyPath: "endPoint")
+        topEnd.fromValue = CGPoint(x: 1.0, y: 0.0)
+        topEnd.toValue = CGPoint(x: 0.9, y: 0.2)
+        topEnd.duration = 6.0
+        topEnd.autoreverses = true
+        topEnd.repeatCount = .infinity
+        topEnd.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        
+        bgGradientTop.add(topStart, forKey: "topStart")
+        bgGradientTop.add(topEnd, forKey: "topEnd")
+        
+        let colorCycle = CAKeyframeAnimation(keyPath: "colors")
+        colorCycle.values = [
+            [AppColors.secondary.withAlphaComponent(0.3).cgColor, AppColors.primary.withAlphaComponent(0.2).cgColor],
+            [AppColors.accent.withAlphaComponent(0.3).cgColor, AppColors.primary.withAlphaComponent(0.2).cgColor],
+            [AppColors.secondary.withAlphaComponent(0.3).cgColor, AppColors.accent.withAlphaComponent(0.2).cgColor]
+        ]
+        colorCycle.keyTimes = [0, 0.5, 1]
+        colorCycle.duration = 10.0
+        colorCycle.autoreverses = true
+        colorCycle.repeatCount = .infinity
+        colorCycle.timingFunctions = [
+            CAMediaTimingFunction(name: .easeInEaseOut),
+            CAMediaTimingFunction(name: .easeInEaseOut)
+        ]
+        
+        bgGradientBottom.add(colorCycle, forKey: "bottomColors")
+    }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        bgGradientTop.frame = view.bounds
+        bgGradientBottom.frame = view.bounds
+        if let maskLayer = bgGradientBottom.mask as? CAShapeLayer {
+            let path = UIBezierPath()
+            let w = view.bounds.width
+            let h = view.bounds.height
+            // Bezier ribbon along the very top for distinct orientation
+            path.move(to: CGPoint(x: 0, y: h * 0.08))
+            path.addCurve(to: CGPoint(x: w * 0.28, y: h * 0.02), controlPoint1: CGPoint(x: w * 0.10, y: h * 0.20), controlPoint2: CGPoint(x: w * 0.18, y: h * -0.06))
+            path.addCurve(to: CGPoint(x: w * 0.68, y: h * 0.10), controlPoint1: CGPoint(x: w * 0.42, y: h * 0.10), controlPoint2: CGPoint(x: w * 0.56, y: h * 0.22))
+            path.addCurve(to: CGPoint(x: w, y: h * 0.04), controlPoint1: CGPoint(x: w * 0.80, y: h * 0.00), controlPoint2: CGPoint(x: w * 0.92, y: h * -0.04))
+            path.addLine(to: CGPoint(x: w, y: h))
+            path.addLine(to: CGPoint(x: 0, y: h))
+            path.close()
+            maskLayer.path = path.cgPath
+        }
     }
 
     func createSession() {
@@ -270,3 +392,4 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         listener?.remove()
     }
 }
+

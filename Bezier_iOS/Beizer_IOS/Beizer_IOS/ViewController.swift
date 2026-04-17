@@ -65,8 +65,11 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
             let path = UIBezierPath()
             let w = view.bounds.width
             let h = view.bounds.height
-            path.move(to: CGPoint(x: 0, y: h * 0.25))
-            path.addCurve(to: CGPoint(x: w, y: h * 0.35), controlPoint1: CGPoint(x: w * 0.25, y: h * 0.15), controlPoint2: CGPoint(x: w * 0.75, y: h * 0.55))
+            // Bezier ribbon sweeping across upper third
+            path.move(to: CGPoint(x: 0, y: h * 0.18))
+            path.addCurve(to: CGPoint(x: w * 0.35, y: h * 0.12), controlPoint1: CGPoint(x: w * 0.12, y: h * 0.30), controlPoint2: CGPoint(x: w * 0.22, y: h * 0.02))
+            path.addCurve(to: CGPoint(x: w * 0.7, y: h * 0.22), controlPoint1: CGPoint(x: w * 0.48, y: h * 0.22), controlPoint2: CGPoint(x: w * 0.58, y: h * 0.30))
+            path.addCurve(to: CGPoint(x: w, y: h * 0.16), controlPoint1: CGPoint(x: w * 0.82, y: h * 0.14), controlPoint2: CGPoint(x: w * 0.92, y: h * 0.04))
             path.addLine(to: CGPoint(x: w, y: h))
             path.addLine(to: CGPoint(x: 0, y: h))
             path.close()
@@ -101,8 +104,11 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         let path = UIBezierPath()
         let w = view.bounds.width
         let h = view.bounds.height
-        path.move(to: CGPoint(x: 0, y: h * 0.25))
-        path.addCurve(to: CGPoint(x: w, y: h * 0.35), controlPoint1: CGPoint(x: w * 0.25, y: h * 0.15), controlPoint2: CGPoint(x: w * 0.75, y: h * 0.55))
+        // Bezier ribbon sweeping across upper third
+        path.move(to: CGPoint(x: 0, y: h * 0.18))
+        path.addCurve(to: CGPoint(x: w * 0.35, y: h * 0.12), controlPoint1: CGPoint(x: w * 0.12, y: h * 0.30), controlPoint2: CGPoint(x: w * 0.22, y: h * 0.02))
+        path.addCurve(to: CGPoint(x: w * 0.7, y: h * 0.22), controlPoint1: CGPoint(x: w * 0.48, y: h * 0.22), controlPoint2: CGPoint(x: w * 0.58, y: h * 0.30))
+        path.addCurve(to: CGPoint(x: w, y: h * 0.16), controlPoint1: CGPoint(x: w * 0.82, y: h * 0.14), controlPoint2: CGPoint(x: w * 0.92, y: h * 0.04))
         path.addLine(to: CGPoint(x: w, y: h))
         path.addLine(to: CGPoint(x: 0, y: h))
         path.close()
@@ -336,3 +342,4 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate & UINavi
         }
     }
 }
+
