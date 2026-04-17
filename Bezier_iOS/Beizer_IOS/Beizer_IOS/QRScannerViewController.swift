@@ -1,7 +1,7 @@
 import UIKit
 import AVFoundation
 
-class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate, UIGestureRecognizerDelegate {
+class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsDelegate {
     
     var captureSession: AVCaptureSession!
     var previewLayer: AVCaptureVideoPreviewLayer!
@@ -12,8 +12,7 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        view.backgroundColor = UIColor.black
-        installGlobalRipple()
+        view.backgroundColor = .systemBackground
         
         // Set up the capture session
         captureSession = AVCaptureSession()
@@ -69,8 +68,6 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        animateScannerOverlay()
-        VisualEffects.applyParallax(to: scanFrameView, amount: 14)
         
         if captureSession?.isRunning == false {
             DispatchQueue.global(qos: .userInitiated).async {
@@ -93,7 +90,6 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         
         captureSession.stopRunning()
         animateScanSuccess()
-        VisualEffects.sparkleBurst(at: CGPoint(x: view.bounds.midX, y: view.bounds.midY), in: view, colors: [.systemYellow, .systemMint, .systemBlue, .systemPink])
         
         if let metadataObject = metadataObjects.first {
             guard let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject else { return }
@@ -185,70 +181,21 @@ class QRScannerViewController: UIViewController, AVCaptureMetadataOutputObjectsD
         )
         scanFrameView.layer.cornerRadius = 18
         scanFrameView.layer.borderWidth = 3
-        scanFrameView.layer.borderColor = UIColor.systemMint.cgColor
-        scanFrameView.backgroundColor = UIColor.systemMint.withAlphaComponent(0.08)
+        scanFrameView.layer.borderColor = UIColor.label.cgColor
+        scanFrameView.backgroundColor = .clear
         view.addSubview(scanFrameView)
 
         scanLineView.frame = CGRect(x: 14, y: 10, width: side - 28, height: 4)
         scanLineView.layer.cornerRadius = 2
-        scanLineView.backgroundColor = UIColor.systemGreen
+        scanLineView.backgroundColor = .label
         scanFrameView.addSubview(scanLineView)
-
-        scanFrameView.alpha = 0
-        VisualEffects.heroEntrance(scanFrameView, delay: 0.05, translateY: 20)
-        VisualEffects.glowPulse(on: scanFrameView, color: .systemMint)
-    }
-
-    private func animateScannerOverlay() {
-        guard !VisualEffects.shouldReduceMotion else { return }
-        guard scanLineView.layer.animation(forKey: "scannerLineLoop") == nil else { return }
-
-        let animation = CABasicAnimation(keyPath: "position.y")
-        animation.fromValue = 10
-        animation.toValue = scanFrameView.bounds.height - 10
-        animation.duration = 1.25
-        animation.repeatCount = .infinity
-        animation.autoreverses = true
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        scanLineView.layer.add(animation, forKey: "scannerLineLoop")
     }
 
     private func animateScanSuccess() {
-        guard !didAnimateSuccess else { return }
         didAnimateSuccess = true
         scanFrameView.layer.removeAllAnimations()
         scanLineView.layer.removeAllAnimations()
-
-        if VisualEffects.shouldReduceMotion {
-            UIView.animate(withDuration: 0.15) {
-                self.scanFrameView.alpha = 0
-            }
-            return
-        }
-
-        UIView.animate(withDuration: 0.2, animations: {
-            self.scanFrameView.transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
-            self.scanFrameView.layer.borderColor = UIColor.systemYellow.cgColor
-        }) { _ in
-            UIView.animate(withDuration: 0.2) {
-                self.scanFrameView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
-                self.scanFrameView.alpha = 0
-            }
-        }
-    }
-
-    private func installGlobalRipple() {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap(_:)))
-        tap.cancelsTouchesInView = false
-        tap.delegate = self
-        view.addGestureRecognizer(tap)
-    }
-
-    @objc private func handleBackgroundTap(_ gesture: UITapGestureRecognizer) {
-        VisualEffects.ripple(at: gesture.location(in: view), in: view, color: .systemMint)
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        !(touch.view is UIControl)
+        // No animations; simply hide the overlay
+        scanFrameView.isHidden = true
     }
 }

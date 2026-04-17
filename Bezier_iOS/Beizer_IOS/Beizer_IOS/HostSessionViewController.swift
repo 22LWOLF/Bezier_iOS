@@ -9,7 +9,7 @@ import UIKit
 import FirebaseFirestore
 import CoreImage
 
-class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource, UIGestureRecognizerDelegate {
+class HostSessionViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
     
     @IBOutlet weak var qrCodeImageView: UIImageView!
     @IBOutlet weak var attendeeCountLabel: UILabel!
@@ -19,7 +19,6 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     var participants: [ParticipantInfo] = []
     var listener: ListenerRegistration?
     private var previousParticipantCount: Int = 0
-    private var didAnimateEntrance = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -27,23 +26,11 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         attendeeTableView.delegate = self
         attendeeTableView.dataSource = self
         attendeeCountLabel.text = "Attendees: 0"
-        qrCodeImageView.alpha = 0
-        qrCodeImageView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
-        installGlobalRipple()
-        VisualEffects.applyParallax(to: qrCodeImageView, amount: 14)
         
         // Create session in Firebase
         createSession()
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        guard !didAnimateEntrance else { return }
-        didAnimateEntrance = true
-        VisualEffects.heroEntrance(attendeeCountLabel, delay: 0.03, translateY: 12)
-        VisualEffects.heroEntrance(attendeeTableView, delay: 0.08, translateY: 20)
-    }
-    
     func createSession() {
         let sessionName = "Attendance Session"
         
@@ -69,11 +56,9 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
                    let qrImage = self.generateQRCode(from: jsonString) {
                     print("QR payload: \(jsonString)")
                     self.qrCodeImageView.image = qrImage
-                    self.animateQRCodeReveal()
                 } else {
                     print("Failed to build QR JSON payload, falling back to raw sessionId")
                     self.qrCodeImageView.image = self.generateQRCode(from: sessionId)
-                    self.animateQRCodeReveal()
                 }
                 
                 // Start listening for participants
@@ -112,20 +97,13 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
             
             self.participants = participants
             self.updateParticipantCount()
-            self.animateParticipantListRefresh(from: previousParticipants, to: participants)
+            self.attendeeTableView.reloadData()
         }
     }
     
     func updateParticipantCount() {
         attendeeCountLabel.text = "Attendees: \(participants.count)"
-        if participants.count != previousParticipantCount {
-            attendeeCountLabel.animateSoftPulse()
-            VisualEffects.glowPulse(on: attendeeCountLabel, color: .systemTeal)
-            let burstPoint = CGPoint(x: attendeeCountLabel.frame.midX, y: attendeeCountLabel.frame.midY)
-            let converted = attendeeCountLabel.superview?.convert(burstPoint, to: view) ?? CGPoint(x: view.bounds.midX, y: attendeeCountLabel.frame.maxY)
-            VisualEffects.sparkleBurst(at: converted, in: view, colors: [.systemTeal, .systemYellow, .systemPurple])
-            previousParticipantCount = participants.count
-        }
+        previousParticipantCount = participants.count
     }
     
     func generateQRCode(from string: String) -> UIImage? {
@@ -254,22 +232,15 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
     // MARK: - Actions
     
     @IBAction func endSessionTapped(_ sender: UIButton) {
-        sender.animatePlayfulTap()
-        let origin = sender.superview?.convert(sender.center, to: view) ?? view.center
-        VisualEffects.ripple(at: origin, in: view, color: .systemRed)
-        VisualEffects.glowPulse(on: sender, color: .systemRed)
         let alert = UIAlertController(
             title: "End Session?",
             message: "Are you sure? \(participants.count) students checked in.",
             preferredStyle: .alert
         )
-        
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        
         alert.addAction(UIAlertAction(title: "End Session", style: .destructive) { _ in
             self.endSession()
         })
-        
         present(alert, animated: true)
     }
     
@@ -298,58 +269,4 @@ class HostSessionViewController: UIViewController, UITableViewDelegate, UITableV
         super.viewWillDisappear(animated)
         listener?.remove()
     }
-
-    private func animateQRCodeReveal() {
-        if VisualEffects.shouldReduceMotion {
-            UIView.animate(withDuration: 0.2) {
-                self.qrCodeImageView.alpha = 1
-                self.qrCodeImageView.transform = .identity
-            }
-            return
-        }
-
-        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: [.curveEaseOut], animations: {
-            self.qrCodeImageView.alpha = 1
-            self.qrCodeImageView.transform = .identity
-            self.qrCodeImageView.transform = self.qrCodeImageView.transform.rotated(by: 0.02)
-        }) { _ in
-            UIView.animate(withDuration: 0.14) {
-                self.qrCodeImageView.transform = .identity
-            }
-        }
-        VisualEffects.glowPulse(on: qrCodeImageView, color: .systemGreen)
-    }
-
-    private func animateParticipantListRefresh(from old: [ParticipantInfo], to new: [ParticipantInfo]) {
-        let oldIds = Set(old.map { $0.participantId })
-        let newIds = Set(new.map { $0.participantId })
-
-        let inserted = newIds.subtracting(oldIds)
-        let deleted = oldIds.subtracting(newIds)
-        if VisualEffects.shouldReduceMotion {
-            attendeeTableView.reloadData()
-            return
-        }
-
-        let duration: TimeInterval = (inserted.isEmpty && deleted.isEmpty) ? 0.18 : 0.32
-        UIView.transition(with: attendeeTableView, duration: duration, options: [.transitionCrossDissolve], animations: {
-            self.attendeeTableView.reloadData()
-        })
-    }
-
-    private func installGlobalRipple() {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleBackgroundTap(_:)))
-        tap.cancelsTouchesInView = false
-        tap.delegate = self
-        view.addGestureRecognizer(tap)
-    }
-
-    @objc private func handleBackgroundTap(_ gesture: UITapGestureRecognizer) {
-        VisualEffects.ripple(at: gesture.location(in: view), in: view, color: .systemCyan)
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        !(touch.view is UIControl)
-    }
 }
-

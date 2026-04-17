@@ -32,7 +32,6 @@ class FirebaseManager {
 
     /// Firestore field for profile image URL (`profilePictureURL` is still read for older documents).
     private static let userPhotoURLKey = "photoURL"
-    private static let legacyUserPhotoURLKey = "profilePictureURL"
 
     /// Legacy accounts store `users/{uid}`; newer accounts use `users/{normalizedEmail}`.
     private func photoURLString(from snapshot: DocumentSnapshot?) -> String? {
@@ -41,19 +40,12 @@ class FirebaseManager {
             let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { return trimmed }
         }
-        if let url = data[Self.legacyUserPhotoURLKey] as? String {
-            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return trimmed }
-        }
         return nil
     }
 
     private func normalizePhotoURLField(in merged: inout [String: Any]) {
         let photo = (merged[Self.userPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let legacy = (merged[Self.legacyUserPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if photo.isEmpty && !legacy.isEmpty {
-            merged[Self.userPhotoURLKey] = legacy
-        }
+        if photo.isEmpty { merged.removeValue(forKey: Self.userPhotoURLKey) }
     }
 
     /// Older user docs may still use `participantemail` / `participantDisplayName` / `firstName`+`lastName`.
@@ -124,10 +116,9 @@ class FirebaseManager {
             }
             if let u = uidData {
                 for (key, value) in u {
-                    if key == Self.userPhotoURLKey || key == Self.legacyUserPhotoURLKey {
+                    if key == Self.userPhotoURLKey {
                         let mergedPhoto = (merged[Self.userPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        let mergedLegacy = (merged[Self.legacyUserPhotoURLKey] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        if mergedPhoto.isEmpty && mergedLegacy.isEmpty {
+                        if mergedPhoto.isEmpty {
                             merged[Self.userPhotoURLKey] = value
                         }
                     } else if merged[key] == nil {
@@ -475,13 +466,6 @@ class FirebaseManager {
                         return
                     }
                 }
-                if let raw = data[Self.legacyUserPhotoURLKey] as? String {
-                    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        completion(.success(trimmed))
-                        return
-                    }
-                }
                 completion(.failure(NSError(domain: "Firestore", code: -1, userInfo: [NSLocalizedDescriptionKey: "Profile photo URL not found"])))
             case .failure(let error):
                 completion(.failure(error))
@@ -606,8 +590,7 @@ class FirebaseManager {
                                     "participantId": userID,
                                     "participantEmail": finalEmail,
                                     "participantDisplayName": finalDisplayName,
-                                    Self.userPhotoURLKey: (userData[Self.userPhotoURLKey] as? String)
-                                        ?? (userData[Self.legacyUserPhotoURLKey] as? String) ?? "",
+                                    Self.userPhotoURLKey: (userData[Self.userPhotoURLKey] as? String) ?? "",
                                     "checkedInAt": Int(Date().timeIntervalSince1970 * 1000),
                                     "sessionId": sessionID
                                 ]
